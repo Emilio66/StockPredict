@@ -1,7 +1,7 @@
 # StockPredict
 
 ### v0.1 Predict the moving direction of stock index
-#### 1. Data Prepare
+#### 1. Data Preparing
 
 * Using close price everyday for stock index in china
 
