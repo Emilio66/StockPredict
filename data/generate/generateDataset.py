@@ -70,4 +70,4 @@ def generateData(fileName, startTime, endTime, stocks, table = "factors_day", TY
 ##############################################
 ################# EXAMPLE USAGE ##############
 stock_indexes=["000001.SH","399001.SZ",'399006.SZ','000300.SH','000016.SH','000905.SH']
-generateData("E:\\close_2016-2017.csv",datetime.date(2016,1,1),datetime.date(2017,4,30), stock_indexes)
+generateData("E:\\close_2012-2017.csv",datetime.date(2012,1,1),datetime.date(2017,4,30), stock_indexes)
