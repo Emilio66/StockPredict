@@ -17,11 +17,31 @@ dataset['mmt'] = 0.0
 for i in range(1, len(dataset)):
     dataset['mmt'][i] = (dataset['close'][i] - dataset['close'][i-1]) / dataset['close'][i]
 
-# dataset['mmt'].plot(lw = 2.)
-# plt.show()
 # count (histogramming)
 print("-------------------- Momentum Distribution ------------------")
 print(dataset['mmt'].value_counts(bins=5).sort_index())
+
+# classify by counts
+dataset['label'] = 0
+
+for i in range(len(dataset)):
+    mmt = dataset['mmt'][i]
+    if mmt < -0.02:
+        dataset['label'][i] = 0
+    elif mmt < -0.005:
+        dataset['label'][i] = 1
+    elif mmt < 0.005:
+        dataset['label'][i] = 2
+    elif mmt < 0.02:
+        dataset['label'][i] = 3
+    else:
+        dataset['label'][i] = 4
+
+# EXCEPTION WARNNING: SettingWithCopyWarning (Pandas don't know whether a copy or view return, no guarantee of successful write)
+
+dataset['label'].plot(lw = 2.)
+plt.show()
+
 # dataset['mmt'].value_counts(bins=10, ascending=False).plot(lw = 2.)
 plt.hist(dataset['mmt'].values, bins = 5)
 plt.xlabel('Momentum')
