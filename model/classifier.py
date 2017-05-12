@@ -34,7 +34,8 @@ for i in range(len(dataset)):
     else:
         dataset['label'][i] = 4
 print("---- Label Distribution Check --------")
-print("Total: ",len(dataset['label']),dataset['label'].value_counts().sort_index())
+print("Total: ",len(dataset['label']))
+print(dataset['label'].value_counts().sort_index())
 print (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) , " ------ Complete Data Preparation")
 
 
@@ -43,8 +44,8 @@ def next_batch(n_batch, n_step,n_input, index=0):
     X_batch, y_batch = [],[]
     for i in range(index, n_batch+index):
         X_batch.append(dataset['close'].values[i : i+n_step])
-        y_batch.append(dataset['label'].values[i : i+n_step])
-    return np.array(X_batch).reshape(n_batch,n_step,n_input), np.array(y_batch).reshape(n_batch,n_step,n_input)
+        y_batch.append(dataset['label'].values[i+1+n_step]) #n time step share 1 label
+    return np.array(X_batch).reshape(n_batch,n_step,n_input), np.array(y_batch)#.reshape(-1)
 
 
 # how long will a span cover, e.g. 20 days (4 tradable weeks)
@@ -56,39 +57,41 @@ BATCH_SIZE = 3
 for i in range(1):
     X_batch, y_batch = next_batch(BATCH_SIZE, TIME_SPAN, 1, i*TIME_SPAN*BATCH_SIZE)
 
-print(type(X_batch)) #  <class 'list'>
-print("-------- \n ",X_batch.shape," \n--------\n", X_batch) # <class 'numpy.ndarray'>
+print("X_batch type:",type(X_batch)) #  <class 'list'>
+print("-------- X_batch_shape ",X_batch.shape) # <class 'numpy.ndarray'>
 
 #########################
 ### contruction phase ###
 #########################
 tf.reset_default_graph()
-n_neurons = 250
+n_neurons = 150 #250
 n_steps = TIME_SPAN
 n_input = 1
-n_output = 1
-n_layers = 3
+n_output = 5 #5 class
+n_layers = 1 #3
 learning_rate = 0.001#0.0005 # # 0.02 # 0.005
 
 X = tf.placeholder(tf.float32, [None, n_steps, n_input])
-y = tf.placeholder(tf.float32, [None, n_steps, n_output])
+y = tf.placeholder(tf.int32, [None]) # one sequence one label
 
-# define network, 1 layer now
-lstm_cell = tf.contrib.rnn.BasicLSTMCell(num_units=n_neurons, activation=tf.nn.relu)
-cells = lstm_cell
-# 3 layers' lstm
-#cells = tf.contrib.rnn.MultiRNNCell([lstm_cell]*3)
+with tf.variable_scope("rnn", initializer=tf.contrib.layers.variance_scaling_initializer()):
+    # define network, 1 layer now
+    lstm_cell = tf.contrib.rnn.BasicLSTMCell(num_units=n_neurons, activation=tf.nn.relu)
+    #cells = tf.contrib.rnn.MultiRNNCell([lstm_cell]*n_layers,state_is_tuple=False)
+    #cells = tf.contrib.rnn.MultiRNNCell([lstm_cell]*n_layers)
+    cells = lstm_cell
+    rnn_outputs, states = tf.nn.dynamic_rnn(cells, X, dtype=tf.float32)
 
 # Add Dropout
-is_training = False 
-keep_prob = 0.75
-if is_training:
-    lstm_cell = tf.contrib.rnn.DropoutWrapper(cells, input_keep_prob=keep_prob)
+#is_training = False 
+#keep_prob = 0.75
+#if is_training:
+#    lstm_cell = tf.contrib.rnn.DropoutWrapper(cells, input_keep_prob=keep_prob)
 
-rnn_outputs, states = tf.nn.dynamic_rnn(cells, X, dtype=tf.float32)
-classifier= fully_connected(states, n_outputs, activation_fn=None)
-print("Shape of Outputs: ",outputs.shape, "shape of states: ", states.shape)
-print("Shape of classifier: ",classifier.shape)
+states = tf.concat(axis=1, values=states)
+classifier= fully_connected(states, n_output, activation_fn=None)
+print("Shape of Outputs: ",rnn_outputs.shape, "shape of states: ", states.shape)
+print("Shape of classifier: ",classifier.shape, "Shape of y: ", y.shape)
 # stacked_rnn_outputs = tf.reshape(rnn_outputs, [-1, n_neurons])
 # stacked_outputs = fully_connected(stacked_rnn_outputs, n_output, activation_fn=None)
 # outputs = tf.reshape(stacked_outputs, [-1, n_steps, n_output])
@@ -126,7 +129,9 @@ data = dataset['close'].values[size-TIME_SPAN-1:]
 X_new = np.array(data[:-1])
 y_new = np.array(data[1:])
 X_test = X_new.reshape(-1,TIME_SPAN,n_input)
-y_test = y_new.reshape(-1,TIME_SPAN,n_input)
+label = []
+label.append(dataset['label'].values[-1])
+y_test = np.array(label)#.reshape(-1,TIME_SPAN)
 print("X_test: ",X_test,"y_test",y_test)
 date_axis = dataset.index[size-TIME_SPAN-1:]
 print("date list:",date_axis)
@@ -137,6 +142,7 @@ with tf.Session() as sess:
     for j in range(n_epoch):
         for i in range(n_training):
             X_batch, y_batch = next_batch(BATCH_SIZE, TIME_SPAN,n_input, i*BATCH_SIZE)
+            X_batch = X_batch.reshape((-1, n_steps, n_input))
             sess.run(training_op, feed_dict={X: X_batch, y: y_batch})
             if i % 10 == 0:
                 acc_train = accuracy.eval(feed_dict={X: X_batch, y: y_batch})
@@ -145,7 +151,7 @@ with tf.Session() as sess:
         # evaluate
         print("---------Epoch ", j, " Train accuracy:", acc_train, " Test accuracy:", acc_test)
         # X_new = time_series(np.array(t_instance[:-1].reshape(-1, n_steps, n_input)))
-        y_pred = sess.run(outputs, feed_dict={X: X_test})
+        y_pred = sess.run(classifier, feed_dict={X: X_test})
         #print(y_pred[0,:-1,0],'\n',X_test[0,1:,0])
     #print(y_pred)
     #y_target = time_series(np.array(t_instance[1:].reshape(-1, n_steps, n_input)))
