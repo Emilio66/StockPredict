@@ -117,11 +117,11 @@ def elapsed(sec):
 ##############################
 ##### Training Phase #########
 ##############################
-n_epoch = 1#10
+n_epoch = 10#5#10
 n_input = 1
-data_size = len(dataset['close']) // BATCH_SIZE
-n_training = int(data_size * TRAIN_RATIO)
-print("data size %d, train size %d" % (data_size,n_training))
+n_batch = (len(dataset['close']) - TIME_SPAN) // BATCH_SIZE
+n_training = int(n_batch * TRAIN_RATIO)
+print("data size %d, train size %d" % (n_batch,n_training))
 
 # add a test case //SHOULD BE MORE
 size = len(dataset.index)
@@ -140,31 +140,47 @@ init = tf.global_variables_initializer()
 with tf.Session() as sess:
     init.run()
     for j in range(n_epoch):
+        best_train_acc, sum_train_acc = 0., 0.
         for i in range(n_training):
             X_batch, y_batch = next_batch(BATCH_SIZE, TIME_SPAN,n_input, i*BATCH_SIZE)
             X_batch = X_batch.reshape((-1, n_steps, n_input))
             sess.run(training_op, feed_dict={X: X_batch, y: y_batch})
-            if i % 10 == 0:
+            if i % 3 == 0:
                 acc_train = accuracy.eval(feed_dict={X: X_batch, y: y_batch})
-                acc_test = accuracy.eval(feed_dict={X: X_test,y: y_test})
-                print(i,elapsed(time.time()-start_time), "Train accuracy: ", acc_train, "Test accuracy:", acc_test)
+                print(i,elapsed(time.time()-start_time), "Train accuracy: ", acc_train)
+                if acc_train > best_train_acc:
+                    best_train_acc = acc_train
+                sum_train_acc += acc_train
         # evaluate
-        print("---------Epoch ", j, " Train accuracy:", acc_train, " Test accuracy:", acc_test)
-        # X_new = time_series(np.array(t_instance[:-1].reshape(-1, n_steps, n_input)))
-        res = sess.run(classifier, feed_dict={X: X_test})
-        _, y_pred = tf.nn.top_k(res)  # return the indices
-        y_pred = y_pred.eval() 
-        #print(y_pred[0,:-1,0],'\n',X_test[0,1:,0])
-    #print(y_pred)
-    #y_target = time_series(np.array(t_instance[1:].reshape(-1, n_steps, n_input)))
-    #print(y_target)
+        print("       ---- TESTING ---")
+        best_test_acc, sum_test_acc = 0., 0.
+        for i in range(n_training,n_batch):
+            X_test_batch, y_test_batch = next_batch(BATCH_SIZE, TIME_SPAN, n_input, i*BATCH_SIZE)
+            X_test_batch = X_test_batch.reshape((-1, n_steps, n_input))
+            sess.run(training_op, feed_dict={X: X_test_batch, y: y_test_batch})
+            acc_test = accuracy.eval(feed_dict={X: X_test_batch, y: y_test_batch})
+            if acc_test > best_test_acc:
+                best_test_acc = acc_test
+            sum_test_acc += acc_test
+            print(i,elapsed(time.time()-start_time), "Test accuracy:", acc_test)
+        print("================= Epoch ", j)
+        print("   BEST Train Accuracy:", best_train_acc, " AVERAGE Train Accuracy:", sum_train_acc/n_training*3.0)
+        print("   BEST Test Accuracy:", best_test_acc, " AVERAGE Test Accuracy:", sum_test_acc/(n_batch - n_training))
+    
+    # predict 1 value for ploting purpose
+    res = sess.run(classifier, feed_dict={X: X_test})
+    _, y_pred = tf.nn.top_k(res)  # return the indices
+    y_pred = y_pred.eval() 
+    print("Class: ",y_pred)
+
+# plotting
 y_predict_series = []
 print(type(y_pred), y_pred.shape, len(y_pred))
 y_pred = y_pred[0,:]
-categoryList = [-0.04, -0.01, 0, 0.01, 0.04] # rough category value
+categoryList = [-0.04, -0.01, 0, 0.01, 0.04] # rough category value: indices represents category
 for i in range(len(y_pred)):
     try:
-        y_predict_series.append(X_new[i] * categoryList[int(y_pred[i])] + X_new[i])
+        y_predict_series.append(X_new[i] * categoryList[y_pred[i]] + X_new[i])
     except IndexError as e:
         print ("index error",y_pred[i],e)
 plt.title("Testing the model", fontsize=14)
