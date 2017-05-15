@@ -49,9 +49,9 @@ def next_batch(n_batch, n_step,n_input, index=0):
 
 
 # how long will a span cover, e.g. 20 days (4 tradable weeks)
-TIME_SPAN = 20
+TIME_SPAN = 10
 TRAIN_RATIO = 0.9#0.8
-BATCH_SIZE = 3
+BATCH_SIZE = 10
 
 # testing data correctness
 for i in range(1):
@@ -117,7 +117,7 @@ def elapsed(sec):
 ##############################
 ##### Training Phase #########
 ##############################
-n_epoch = 10
+n_epoch = 1#10
 n_input = 1
 data_size = len(dataset['close']) // BATCH_SIZE
 n_training = int(data_size * TRAIN_RATIO)
@@ -151,20 +151,26 @@ with tf.Session() as sess:
         # evaluate
         print("---------Epoch ", j, " Train accuracy:", acc_train, " Test accuracy:", acc_test)
         # X_new = time_series(np.array(t_instance[:-1].reshape(-1, n_steps, n_input)))
-        y_pred = sess.run(classifier, feed_dict={X: X_test})
+        res = sess.run(classifier, feed_dict={X: X_test})
+        _, y_pred = tf.nn.top_k(res)  # return the indices
+        y_pred = y_pred.eval() 
         #print(y_pred[0,:-1,0],'\n',X_test[0,1:,0])
     #print(y_pred)
     #y_target = time_series(np.array(t_instance[1:].reshape(-1, n_steps, n_input)))
     #print(y_target)
 y_predict_series = []
-y_pred = y_pred[0,:,0]
+print(type(y_pred), y_pred.shape, len(y_pred))
+y_pred = y_pred[0,:]
 categoryList = [-0.04, -0.01, 0, 0.01, 0.04] # rough category value
 for i in range(len(y_pred)):
-    y_predict_series.append(X_new[i] * categoryList[y_pred[i]] + X_new[i])
+    try:
+        y_predict_series.append(X_new[i] * categoryList[int(y_pred[i])] + X_new[i])
+    except IndexError as e:
+        print ("index error",y_pred[i],e)
 plt.title("Testing the model", fontsize=14)
 plt.plot(date_axis[:-1], X_new, "bo", markersize=10, label="instance")
 plt.plot(date_axis[1:], y_new, "y*", markersize=10, label="target")
-plt.plot(date_axis[1:], y_predict_series, "r.", markersize=14, label="prediction")
+plt.plot(date_axis[-1], y_predict_series, "r.", markersize=14, label="prediction")
 plt.legend(loc="upper left")
 plt.xlabel("Time")
 plt.show()
