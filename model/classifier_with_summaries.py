@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import time
 
+# yapf: disable
 os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
 FLAGS = None
 
@@ -185,7 +186,7 @@ def train():
 			xs, ys = next_batch(test_cnt)
 			test_cnt += 1
 		return {X: xs, y: ys}
-
+# yapf: enable
 	######### Start Training ########################
 	start_time = time.time()
 	init = tf.global_variables_initializer()
@@ -197,15 +198,15 @@ def train():
 	
 		init.run()
 		for j in range(n_epoch):
-		    best_train_acc, sum_train_acc = 0., 0.
-		    for i in range(FLAGS.max_steps):
-				# Record summaries and test-set accuracy
+			best_train_acc, sum_train_acc = 0., 0.
+			for i in range(FLAGS.max_steps):
 				if i % 5 == 0:
+                # Record summaries and test-set accuracy
 					summary, acc = sess.run([merged, accuracy], feed_dict=feed_dict(False))
 					test_writer.add_summary(summary, i)
 				  	print('Accuracy at step %s: %s' % (i, acc))
 				# Record train set summaries and train
-		    	else:
+                else:
 				  	if i % 10 == 9: # Record execution stats	
 						run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
 						run_metadata = tf.RunMetadata()
