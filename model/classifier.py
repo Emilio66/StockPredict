@@ -1,4 +1,6 @@
 # -*- coding: UTF-8 -*-
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
 import tensorflow as tf
 from tensorflow.contrib.layers import fully_connected
 import numpy as np
@@ -10,6 +12,7 @@ import time
 ####### Data Preparation #############
 ######################################
 data_file = "../data/dataset/close_2016-2017.csv"
+#data_file = "../data/dataset/close_2012-2017.csv"
 dataset = pd.read_csv(data_file,index_col=0, sep=',', usecols=[0,1], skiprows=1, names=['date','close'],parse_dates=True)
 print (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) , " ------ Complete Data Reading")
 
@@ -42,7 +45,8 @@ print (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) , " ------ Complete 
 # Batch Generator. ps: y batch is mmt classification
 def next_batch(n_batch, n_step,n_input, index=0):
     X_batch, y_batch = [],[]
-    for i in range(index, n_batch+index):
+    # retrieve chunks in continuous way. every n_step as a chunk, not overlapped
+    for i in range(index, n_batch*n_step+index,n_step):
         X_batch.append(dataset['close'].values[i : i+n_step])
         y_batch.append(dataset['label'].values[i+1+n_step]) #n time step share 1 label
     return np.array(X_batch).reshape(n_batch,n_step,n_input), np.array(y_batch)#.reshape(-1)
@@ -51,7 +55,8 @@ def next_batch(n_batch, n_step,n_input, index=0):
 # how long will a span cover, e.g. 20 days (4 tradable weeks)
 TIME_SPAN = 10
 TRAIN_RATIO = 0.9#0.8
-BATCH_SIZE = 10
+BATCH_SIZE = 3 
+
 
 # testing data correctness
 for i in range(1):
@@ -68,7 +73,7 @@ n_neurons = 150 #250
 n_steps = TIME_SPAN
 n_input = 1
 n_output = 5 #5 class
-n_layers = 1 #3
+n_layers = 3 #5#10 #5 #3
 learning_rate = 0.001#0.0005 # # 0.02 # 0.005
 
 X = tf.placeholder(tf.float32, [None, n_steps, n_input])
@@ -78,8 +83,8 @@ with tf.variable_scope("rnn", initializer=tf.contrib.layers.variance_scaling_ini
     # define network, 1 layer now
     lstm_cell = tf.contrib.rnn.BasicLSTMCell(num_units=n_neurons, activation=tf.nn.relu)
     #cells = tf.contrib.rnn.MultiRNNCell([lstm_cell]*n_layers,state_is_tuple=False)
-    #cells = tf.contrib.rnn.MultiRNNCell([lstm_cell]*n_layers)
-    cells = lstm_cell
+    cells = tf.contrib.rnn.MultiRNNCell([lstm_cell]*n_layers)
+    #cells = lstm_cell
     rnn_outputs, states = tf.nn.dynamic_rnn(cells, X, dtype=tf.float32)
 
 # Add Dropout
@@ -88,8 +93,13 @@ with tf.variable_scope("rnn", initializer=tf.contrib.layers.variance_scaling_ini
 #if is_training:
 #    lstm_cell = tf.contrib.rnn.DropoutWrapper(cells, input_keep_prob=keep_prob)
 
-states = tf.concat(axis=1, values=states)
+print("Shape of states before concating BIAS: ", states)
+print("STATES: ", states)
+states = states[0] #only need cell's states, omit hidden state
+print("STATES: ", states)
+states = tf.concat(axis=1, values=states) #sum up all neuron's result at final step
 classifier= fully_connected(states, n_output, activation_fn=None)
+print("Shape of Outputs: ",rnn_outputs, "shape of states: ", states)
 print("Shape of Outputs: ",rnn_outputs.shape, "shape of states: ", states.shape)
 print("Shape of classifier: ",classifier.shape, "Shape of y: ", y.shape)
 # stacked_rnn_outputs = tf.reshape(rnn_outputs, [-1, n_neurons])
@@ -117,9 +127,9 @@ def elapsed(sec):
 ##############################
 ##### Training Phase #########
 ##############################
-n_epoch = 10#5#10
+n_epoch = 5#1#5#10
 n_input = 1
-n_batch = (len(dataset['close']) - TIME_SPAN) // BATCH_SIZE
+n_batch = (len(dataset['close']) // TIME_SPAN) // BATCH_SIZE
 n_training = int(n_batch * TRAIN_RATIO)
 print("data size %d, train size %d" % (n_batch,n_training))
 
@@ -132,9 +142,9 @@ X_test = X_new.reshape(-1,TIME_SPAN,n_input)
 label = []
 label.append(dataset['label'].values[-1])
 y_test = np.array(label)#.reshape(-1,TIME_SPAN)
-print("X_test: ",X_test,"y_test",y_test)
+#print("X_test: ",X_test,"y_test",y_test)
 date_axis = dataset.index[size-TIME_SPAN-1:]
-print("date list:",date_axis)
+#print("date list:",date_axis)
 start_time = time.time()
 init = tf.global_variables_initializer()
 with tf.Session() as sess:
