@@ -53,6 +53,7 @@ def data_prepare():
 	print("Total: ",len(dataset['label']))
 	print(dataset['label'].value_counts().sort_index())
 	print (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) , " ------ Complete Data Preparation")
+	return dataset
 
 """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
 def variable_summaries(var):	
@@ -79,7 +80,7 @@ def elapsed(sec):
 ############################
 ###### contruction phase ###
 ############################
-def train():
+def train(dataset):
 	tf.reset_default_graph()
 
 	# how long will a span cover, e.g. 20 days (4 tradable weeks)
@@ -97,14 +98,12 @@ def train():
 		X = tf.placeholder(tf.float32, [None, n_steps, n_input], name='X-input')
 		y = tf.placeholder(tf.int32, [None], name='y-input') # one sequence one label
 
-	with tf.name_scope('lstm_layers'):
-		with tf.variable_scope("lstm", initializer=tf.contrib.layers.variance_scaling_initializer()):
-			# define network, 1 layer now
-			lstm_cell = tf.contrib.rnn.BasicLSTMCell(num_units=n_neurons, activation=tf.nn.relu)
-			#cells = tf.contrib.rnn.MultiRNNCell([lstm_cell]*n_layers,state_is_tuple=False)
-			cells = tf.contrib.rnn.MultiRNNCell([lstm_cell]*n_layers)
-			#cells = lstm_cell
-			rnn_outputs, states = tf.nn.dynamic_rnn(cells, X, dtype=tf.float32)
+	
+	with tf.variable_scope("lstm_layers", initializer=tf.contrib.layers.variance_scaling_initializer()):
+		# define network, 3 Basic LSTM layer now
+		lstm_cell = tf.contrib.rnn.BasicLSTMCell(num_units=n_neurons, activation=tf.nn.relu)
+		cells = tf.contrib.rnn.MultiRNNCell([lstm_cell]*n_layers)
+		rnn_outputs, states = tf.nn.dynamic_rnn(cells, X, dtype=tf.float32)
 
 	# Add Dropout
 	#is_training = False 
@@ -112,25 +111,25 @@ def train():
 	#if is_training:
 	#    lstm_cell = tf.contrib.rnn.DropoutWrapper(cells, input_keep_prob=keep_prob)
 
-	print("Shape of states before concating BIAS: ", states)
+	print('cells.output_size: ', cells.output_size,'cells.state_size: ',cells.state_size)
 	print("STATES: ", states)
 
-	tf.summary.histogram('lstm_outputs',rnn_outputs)
-	tf.summary.histogram('lstm_states', states)
+	tf.summary.histogram('lstm_outputs',rnn_outputs) # new_h, every output
+	tf.summary.histogram('lstm_states', states)  # state is just the tuple(new_c, new_h)
 
-	states = states[0] #only need cell's states, omit hidden state
-	print("STATES: ", states)
+	states = states[-1][1] #retrieve the last state tuple and only need last output/hypothesis states, omit memory cell
+	print("Final STATES: ", states)
 
 	tf.summary.histogram('lstm_cell_states', states)
-	states = tf.concat(axis=1, values=states) #sum up all neuron's result at final step
-	tf.summary.histogram('lstm_cell_states_plus_bias', states)
+	#states = tf.concat(axis=1, values=states) #sum up all neuron's result at final step
+	#tf.summary.histogram('lstm_cell_states_plus_bias', states)
 
-	with tf.name_scope('fully_connected_layer'):
-		fc_layer = fully_connected(states, n_output, activation_fn=None)
+	#with tf.name_scope('fully_connected_layer'):
+	fc_layer = fully_connected(states, n_output, activation_fn=None)
 
 	print("Shape of Outputs: ",rnn_outputs, "shape of states: ", states)
 	print("Shape of Outputs: ",rnn_outputs.shape, "shape of states: ", states.shape)
-	print("Shape of classifier: ",classifier.shape, "Shape of y: ", y.shape)
+	print("Shape of fc_layer: ",fc_layer.shape, "Shape of y: ", y.shape)
 	# stacked_rnn_outputs = tf.reshape(rnn_outputs, [-1, n_neurons])
 	# stacked_outputs = fully_connected(stacked_rnn_outputs, n_output, activation_fn=None)
 	# outputs = tf.reshape(stacked_outputs, [-1, n_steps, n_output])
@@ -141,7 +140,7 @@ def train():
 		# define loss function & optimize method
 		with tf.name_scope('total_loss'):
 			loss = tf.reduce_mean(xentropy)
-	tf.summary.scalar('xentropy',xentropy)
+	tf.summary.scalar('xentropy_mean', loss)
 
 	with tf.name_scope('training'):
 		optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
@@ -149,9 +148,9 @@ def train():
 
 	# measurement
 	with tf.name_scope('accuracy'):
-		correct = tf.nn.in_top_k(classifier, y, 1)
+		correct = tf.nn.in_top_k(fc_layer, y, 1)
 		accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
-	tf.summary.scalar('accuracy',accuracy)
+	tf.summary.scalar('accuracy_mean',accuracy)
 
 	#########################################
 	############# Training Phase    #########
@@ -172,19 +171,17 @@ def train():
 		    y_batch.append(dataset['label'].values[b_index+i+1+TIME_SPAN])   # n time step share 1 label
 		return np.array(X_batch).reshape(BATCH_SIZE,TIME_SPAN,n_input), np.array(y_batch)#.reshape(-1)
 
-	train_cnt = 0
-	test_cnt = n_training
-	def feed_dict(is_training):
+	def feed_dict(is_training, index=0):
 		if is_training:
-			if train_cnt == n_training:
-				train_cnt = 0
-			xs, ys = next_batch(train_cnt)
-			train_cnt += 1
+			if index >= n_training:
+				index = 0
+			xs, ys = next_batch(index)
+			index += 1
 		else:
-			if test_cnt == n_batch:
-				test_cnt = n_training
-			xs, ys = next_batch(test_cnt)
-			test_cnt += 1
+			if index >= n_batch:
+				index = n_training
+			xs, ys = next_batch(index)
+			index += 1
 		return {X: xs, y: ys}
 # yapf: enable
 	######### Start Training ########################
@@ -199,28 +196,32 @@ def train():
 		init.run()
 		for j in range(n_epoch):
 			best_train_acc, sum_train_acc = 0., 0.
-			for i in range(FLAGS.max_steps):
-				if i % 5 == 0:
-                # Record summaries and test-set accuracy
-					summary, acc = sess.run([merged, accuracy], feed_dict=feed_dict(False))
+			
+			test_cnt = n_training
+			for i in range(FLAGS.max_steps):				
+				if i % 10 == 0:
+                	# Record summaries and test-set accuracy
+					summary, acc = sess.run([merged, accuracy], feed_dict=feed_dict(False, test_cnt))
+					test_cnt += 1
 					test_writer.add_summary(summary, i)
 				  	print('Accuracy at step %s: %s' % (i, acc))
-				# Record train set summaries and train
-                else:
-				  	if i % 10 == 9: # Record execution stats	
-						run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-						run_metadata = tf.RunMetadata()
-						summary, _ = sess.run([merged, train_step],
-						                  feed_dict=feed_dict(True),
+					# Record train set summaries and train
+				elif i % 100 == 99: # Record execution stats	
+					run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+					run_metadata = tf.RunMetadata()
+					summary, _, acc = sess.run([merged, training_op,accuracy],
+						                  feed_dict=feed_dict(True, i),
 						                  options=run_options,
 						                  run_metadata=run_metadata)
-						train_writer.add_run_metadata(run_metadata, 'step%03d' % i)
-						train_writer.add_summary(summary, i)
-						print('Adding run metadata for', i)
+					train_writer.add_run_metadata(run_metadata, 'step%03d' % i)
+					train_writer.add_summary(summary, i)
+					print('Adding run metadata for %d, Acc: %s' % (i, acc))
 					# Record a summary
-				  	else:
-						summary, _ = sess.run([merged, train_step], feed_dict=feed_dict(True))
-						train_writer.add_summary(summary, i)
+				else:
+					summary, _, acc = sess.run([merged, training_op,accuracy], feed_dict=feed_dict(True, i))
+					train_writer.add_summary(summary, i)
+					if i % 10 == 9:
+						print('Training %d, Acc: %s' % (i, acc))
 		train_writer.close()
 		test_writer.close()
 
@@ -228,8 +229,8 @@ def main(_):
 	if tf.gfile.Exists(FLAGS.log_dir):
 		tf.gfile.DeleteRecursively(FLAGS.log_dir)
 	tf.gfile.MakeDirs(FLAGS.log_dir)
-	data_prepare()
-	train()
+	dataset = data_prepare()
+	train(dataset)
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
