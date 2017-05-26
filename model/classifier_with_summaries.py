@@ -39,16 +39,16 @@ def data_prepare():
 	mmt_series = dataset['mmt']
 	for i in range(len(dataset)):
 		mmt = mmt_series[i]
-		if mmt < -0.03: #-0.02:
+		if mmt < -0.01: #-0.02:
 		    dataset['label'][i] = 0
-		elif mmt < -0.005:
+		elif mmt <= 0.01:
 		    dataset['label'][i] = 1
-		elif mmt < 0.005:
-		    dataset['label'][i] = 2
-		elif mmt < 0.03: #0.02:
-		    dataset['label'][i] = 3
+		#elif mmt < 0.005:
+		#    dataset['label'][i] = 2
+		#elif mmt < 0.03: #0.02:
+		#    dataset['label'][i] = 3
 		else:
-		    dataset['label'][i] = 4
+		    dataset['label'][i] = 2
 	print("---- Label Distribution Check --------")
 	print("Total: ",len(dataset['label']))
 	print(dataset['label'].value_counts().sort_index())
@@ -90,7 +90,7 @@ def train(dataset):
 	n_neurons = 150 #250
 	n_steps = TIME_SPAN
 	n_input = 5#1, 1 week's data as feature
-	n_output = 5 #5 class
+	n_output = 3#5 #5 class
 	n_layers = 3 #5#10 #5 #3
 	learning_rate = 0.001#0.0005 # # 0.02 # 0.005
 
@@ -153,9 +153,11 @@ def train(dataset):
 		#correct = tf.nn.in_top_k(fc_layer[:,:,-1], y[:,-1], 1) 	# only compare the final state's output class with label
 		final_predict = tf.slice(fc_layer,[0, n_steps - 1, 0],[-1, 1, -1]) 	# [batch_size, n_outputs]
 		final_label = tf.slice(y,[0, n_steps - 1], [-1, 1])					# [batch_size] (1 label)
+		print("sliced predict: ", final_predict, "sliced label:", final_label)
 		final_predict = tf.reshape(final_predict,[-1, n_output])
 		final_label = tf.reshape(final_label,[-1])
-		correct = tf.nn.in_top_k(final_predict, final_label, 2)
+		print("FINAL predict: ", final_predict, "FINAL label:", final_label)
+		correct = tf.nn.in_top_k(final_predict, final_label, 1) # accuracy in top k
 		accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
 	tf.summary.scalar('accuracy_mean',accuracy)
 
