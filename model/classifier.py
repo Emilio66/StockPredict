@@ -11,8 +11,8 @@ import time
 ######################################
 ####### Data Preparation #############
 ######################################
-data_file = "../data/dataset/close_2016-2017.csv"
-#data_file = "../data/dataset/close_2012-2017.csv"
+#data_file = "../data/dataset/close_2016-2017.csv"
+data_file = "../data/dataset/close_2012-2017.csv"
 dataset = pd.read_csv(data_file,index_col=0, sep=',', usecols=[0,1], skiprows=1, names=['date','close'],parse_dates=True)
 print (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) , " ------ Complete Data Reading")
 
@@ -26,16 +26,16 @@ dataset['label'] = 0
 mmt_series = dataset['mmt']
 for i in range(len(dataset)):
     mmt = mmt_series[i]
-    if mmt < -0.02:
+    if mmt < -0.005:
         dataset['label'][i] = 0
-    elif mmt < -0.005:
-        dataset['label'][i] = 1
+    #elif mmt < -0.005:
+    #    dataset['label'][i] = 1
+    #elif mmt < 0.005:
+    #    dataset['label'][i] = 2
     elif mmt < 0.005:
-        dataset['label'][i] = 2
-    elif mmt < 0.02:
-        dataset['label'][i] = 3
+        dataset['label'][i] = 1#3
     else:
-        dataset['label'][i] = 4
+        dataset['label'][i] = 2#4
 print("---- Label Distribution Check --------")
 print("Total: ",len(dataset['label']))
 print(dataset['label'].value_counts().sort_index())
@@ -55,7 +55,7 @@ def next_batch(n_batch, n_step,n_input, index=0):
 # how long will a span cover, e.g. 20 days (4 tradable weeks)
 TIME_SPAN = 10
 TRAIN_RATIO = 0.9#0.8
-BATCH_SIZE = 3 
+BATCH_SIZE = 10 
 
 
 # testing data correctness
@@ -72,7 +72,7 @@ tf.reset_default_graph()
 n_neurons = 150 #250
 n_steps = TIME_SPAN
 n_input = 1
-n_output = 5 #5 class
+n_output = 3 #5 class
 n_layers = 3 #5#10 #5 #3
 learning_rate = 0.001#0.0005 # # 0.02 # 0.005
 
@@ -93,13 +93,13 @@ with tf.variable_scope("rnn", initializer=tf.contrib.layers.variance_scaling_ini
 #if is_training:
 #    lstm_cell = tf.contrib.rnn.DropoutWrapper(cells, input_keep_prob=keep_prob)
 
-print("Shape of states before concating BIAS: ", states)
-print("STATES: ", states)
+#print("Shape of states before concating BIAS: ", states)
+#print("STATES: ", states)
 states = states[0] #only need cell's states, omit hidden state
-print("STATES: ", states)
+#print("STATES: ", states)
 states = tf.concat(axis=1, values=states) #sum up all neuron's result at final step
 classifier= fully_connected(states, n_output, activation_fn=None)
-print("Shape of Outputs: ",rnn_outputs, "shape of states: ", states)
+#print("Shape of Outputs: ",rnn_outputs, "shape of states: ", states)
 print("Shape of Outputs: ",rnn_outputs.shape, "shape of states: ", states.shape)
 print("Shape of classifier: ",classifier.shape, "Shape of y: ", y.shape)
 # stacked_rnn_outputs = tf.reshape(rnn_outputs, [-1, n_neurons])
