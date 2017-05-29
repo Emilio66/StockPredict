@@ -186,7 +186,7 @@ def train(dataset):
 			X_batch.append(X_instance)
 			y_batch.append(y_instance)   # every time step got a label
 		return np.array(X_batch), np.array(y_batch)#.reshape(-1)
-	print('TESTING: ', next_batch(0))
+	#print('TESTING: ', next_batch(0))
 	def feed_dict(is_training, index=0):
 		if is_training:
 			xs, ys = next_batch(index % n_training)
@@ -211,34 +211,34 @@ def train(dataset):
 			
 			test_cnt = n_training
 			for i in range(FLAGS.max_steps):	
+				if i % 10 == 0:
+					# Record summaries and test-set accuracy
+					summary, acc = sess.run([merged, accuracy], feed_dict=feed_dict(False, test_cnt))
+					test_cnt += 1
+					test_writer.add_summary(summary, i)
+					print('Test Accuracy %s: %s' % (i, acc))
 				# Record train set summaries and train
-				if i % 10 == 9: # Record execution stats	
+				elif i % 50 == 49: # Record execution stats	
 					run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
 					run_metadata = tf.RunMetadata()
-					summary, _, acc,fc, fp, fl, lb,cr = sess.run([merged, training_op, accuracy,fc_layer,final_predict,final_label,y,correct],
+					#summary,_,acc,fc, fp, fl, lb,cr = sess.run([merged, training_op, accuracy,fc_layer,final_predict,final_label,y,correct],
+					summary, _, acc, fp, fl, cr = sess.run([merged, training_op, accuracy,final_predict,final_label,correct],
 						                  feed_dict=feed_dict(True, i),
 						                  options=run_options,
 						                  run_metadata=run_metadata)
 					train_writer.add_run_metadata(run_metadata, 'step%03d' % i)
 					train_writer.add_summary(summary, i)
 					print('Adding run metadata for %d, Acc: %s' % (i, acc))
-					print('FC Layer value: ', fc)
-					print('Label value: ', lb)
-					print('Final Label value: ', fl)
+					#print('FC Layer value: ', fc)
 					print('Final Predict value: ', fp)
+					#print('Label value: ', lb)
+					print('Final Label value: ', fl)
 					print('CORRECT: ', cr)
 					# Record a summary
 				else:
 					summary, _ = sess.run([merged, training_op], feed_dict=feed_dict(True, i))
 					train_writer.add_summary(summary, i)
 			
-			## testing after training
-			for i in range(n_batch - n_training):
-				# Record summaries and test-set accuracy
-				summary, acc = sess.run([merged, accuracy], feed_dict=feed_dict(False, test_cnt))
-				test_cnt += 1
-				test_writer.add_summary(summary, i)
-				print('Test Accuracy %s: %s' % (i, acc))
 		train_writer.close()
 		test_writer.close()
 
