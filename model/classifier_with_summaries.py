@@ -102,8 +102,8 @@ def train(dataset):
 
 	
 	with tf.variable_scope("lstm_layers", initializer=tf.contrib.layers.variance_scaling_initializer()):
-		# define network, 3 Basic LSTM layer now
-		lstm_cell = tf.contrib.rnn.BasicLSTMCell(num_units=n_neurons, activation=tf.nn.relu)
+		# define network, 3 LSTM layer now, use tf.tanh as activation function, use peephole
+		lstm_cell = tf.contrib.rnn.LSTMCell(num_units=n_neurons, use_peepholes=False)
 		cells = tf.contrib.rnn.MultiRNNCell([lstm_cell]*n_layers)
 		rnn_outputs, states = tf.nn.dynamic_rnn(cells, X, dtype=tf.float32)
 
