@@ -29,10 +29,12 @@ def data_prepare():
 	dataset = pd.read_csv(data_file,index_col=0, sep=',', usecols=[0,1], skiprows=1, names=['date','close'],parse_dates=True)
 	print (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) , " ------ Complete Data Reading")
 
-	# calculate momentum: Mt = (CLOSE(t) -CLOSE(t-1))/CLOSE(t)
+	# calculate momentum: Mt = (CLOSE(t) -CLOSE(t-1))/CLOSE(t-1)
 	dataset['mmt'] = 0.0
 	for i in range(1, len(dataset)):
-		dataset['mmt'][i] = (dataset['close'][i] - dataset['close'][i-1]) / dataset['close'][i]
+		dataset['mmt'][i] = (dataset['close'][i] - dataset['close'][i-1]) / dataset['close'][i-1]
+	print("-------------------- Momentum Distribution ------------------")
+	print(dataset['mmt'].value_counts(bins=5).sort_index())
 	pd.set_option('mode.chained_assignment',None)
 	# classify by counts
 	dataset['label'] = 0
@@ -96,7 +98,7 @@ def train(dataset):
 
 	with tf.name_scope('input'):
 		X = tf.placeholder(tf.float32, [None, n_steps, n_input], name='X-input')
-		y = tf.placeholder(tf.int32, [None, n_steps], name='y-input') # one sequence one label
+		y = tf.placeholder(tf.int32, [None, n_steps], name='y-input') # every time step correspond to a label
 
 	
 	with tf.variable_scope("lstm_layers", initializer=tf.contrib.layers.variance_scaling_initializer()):
@@ -117,10 +119,9 @@ def train(dataset):
 	tf.summary.histogram('lstm_outputs',rnn_outputs) # new_h, every output
 	tf.summary.histogram('lstm_states', states)  # state is just the tuple(new_c, new_h)
 
-	states = states[-1][1] #retrieve the last layer's state tuple and only need last output/hypothesis states, omit memory cell
-	print("Final STATES: ", states)
-
-	tf.summary.histogram('lstm_cell_states', states)
+	#states = states[-1][1] #retrieve the last layer's state tuple and only need last output/hypothesis states, omit memory cell
+	#print("Final STATES: ", states)
+	#tf.summary.histogram('lstm_cell_states', states)
 	#states = tf.concat(axis=1, values=states) #sum up all neuron's result at final step
 	#tf.summary.histogram('lstm_cell_states_plus_bias', states)
 
@@ -128,10 +129,10 @@ def train(dataset):
 	#fc_layer = fully_connected(states, n_output, activation_fn=None)
 	fc_layer = fully_connected(rnn_outputs, n_output, activation_fn=None)
 
-	print("RNN Outputs: ",rnn_outputs, " RNN states: ", states) 	# Output [batch_size, n_steps, n_neurons], States[batch_size, n_neurons]
-	print("Shape of Outputs: ",rnn_outputs.shape, "shape of states: ", states.shape)
-	print(" Shape of fc_layer: ",fc_layer.shape, "Shape of y: ", y.shape)	# FC_Layer [batch_size, n_steps, n_outputs], Label [batch_size, n_steps]
-	print("FC Layer last output:",fc_layer[:,:,-1])
+	#print("RNN Outputs: ",rnn_outputs, " RNN states: ", states) 	# Output [batch_size, n_steps, n_neurons], States[batch_size, n_neurons]
+	print("Shape of Outputs: ",rnn_outputs.shape, "shape of states: ", tf.shape(states))
+	print("Shape of fc_layer: ",fc_layer.shape, "Shape of y: ", y.shape) # FC_Layer [batch_size, n_steps, n_outputs], Label [batch_size, n_steps]
+	#print("FC Layer last output:",fc_layer[:,:,-1])
 	# stacked_rnn_outputs = tf.reshape(rnn_outputs, [-1, n_neurons])
 	# stacked_outputs = fully_connected(stacked_rnn_outputs, n_output, activation_fn=None)
 	# outputs = tf.reshape(stacked_outputs, [-1, n_steps, n_output])
@@ -139,9 +140,11 @@ def train(dataset):
 	# softmax + cross entropy calculation
 	with tf.name_scope('cross_entropy'):
 		xentropy = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=fc_layer)
+		print("Cross-entropy", xentropy)	#[batch_size, n_steps], float32
 		# define loss function & optimize method
 		with tf.name_scope('total_loss'):
 			loss = tf.reduce_mean(xentropy)
+			print("LOSS:", loss)
 	tf.summary.scalar('xentropy_mean', loss)
 
 	with tf.name_scope('training'):
@@ -167,7 +170,7 @@ def train(dataset):
 	n_epoch = 1#1#5#10
 
 	# split dataset to training set & test set
-	n_batch = (len(dataset['close']) + 1 - TIME_SPAN) // BATCH_SIZE
+	n_batch = (len(dataset['close']) + 1 - TIME_SPAN - n_input) // (BATCH_SIZE * TIME_SPAN)
 	n_training = int(n_batch * TRAIN_RATIO)
 	print("train set: [%d, %d), test set: [%d, %d)" % (0,n_training, n_training, n_batch))
 
@@ -178,23 +181,19 @@ def train(dataset):
 		for i in range(BATCH_SIZE):
 			X_instance, y_instance=[],[]
 			for j in range(TIME_SPAN):
-				X_instance.append(dataset['close'].values[b_index+i : b_index+i+n_input])
-				y_instance.append(dataset['label'].values[b_index+i+1+n_input])
+				X_instance.append(dataset['close'].values[b_index + i*TIME_SPAN + j : b_index + i*TIME_SPAN + j + n_input])
+				y_instance.append(dataset['label'].values[b_index + i*TIME_SPAN + j + n_input])
 			X_batch.append(X_instance)
 			y_batch.append(y_instance)   # every time step got a label
 		return np.array(X_batch), np.array(y_batch)#.reshape(-1)
-
+	print('TESTING: ', next_batch(0))
 	def feed_dict(is_training, index=0):
 		if is_training:
-			if index >= n_training:
-				index = 0
-			xs, ys = next_batch(index)
-			index += 1
+			xs, ys = next_batch(index % n_training)
 		else:
 			if index >= n_batch:
 				index = n_training
 			xs, ys = next_batch(index)
-			index += 1
 		return {X: xs, y: ys}
 # yapf: enable
 	######### Start Training ########################
@@ -211,29 +210,35 @@ def train(dataset):
 			best_train_acc, sum_train_acc = 0., 0.
 			
 			test_cnt = n_training
-			for i in range(FLAGS.max_steps):				
-				if i % 10 == 0:
-                	# Record summaries and test-set accuracy
-					summary, acc = sess.run([merged, accuracy], feed_dict=feed_dict(False, test_cnt))
-					test_cnt += 1
-					test_writer.add_summary(summary, i)
-				  	print('Accuracy at step %s: %s' % (i, acc))
-					# Record train set summaries and train
-				elif i % 100 == 99: # Record execution stats	
+			for i in range(FLAGS.max_steps):	
+				# Record train set summaries and train
+				if i % 10 == 9: # Record execution stats	
 					run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
 					run_metadata = tf.RunMetadata()
-					summary, _ = sess.run([merged, training_op],
+					summary, _, acc,fc, fp, fl, lb,cr = sess.run([merged, training_op, accuracy,fc_layer,final_predict,final_label,y,correct],
 						                  feed_dict=feed_dict(True, i),
 						                  options=run_options,
 						                  run_metadata=run_metadata)
 					train_writer.add_run_metadata(run_metadata, 'step%03d' % i)
 					train_writer.add_summary(summary, i)
 					print('Adding run metadata for %d, Acc: %s' % (i, acc))
+					print('FC Layer value: ', fc)
+					print('Label value: ', lb)
+					print('Final Label value: ', fl)
+					print('Final Predict value: ', fp)
+					print('CORRECT: ', cr)
 					# Record a summary
 				else:
 					summary, _ = sess.run([merged, training_op], feed_dict=feed_dict(True, i))
 					train_writer.add_summary(summary, i)
-					
+			
+			## testing after training
+			for i in range(n_batch - n_training):
+				# Record summaries and test-set accuracy
+				summary, acc = sess.run([merged, accuracy], feed_dict=feed_dict(False, test_cnt))
+				test_cnt += 1
+				test_writer.add_summary(summary, i)
+				print('Test Accuracy %s: %s' % (i, acc))
 		train_writer.close()
 		test_writer.close()
 
