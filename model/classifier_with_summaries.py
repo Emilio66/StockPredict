@@ -15,47 +15,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import time
+import sys
+sys.path.append("..")
+from data.dataset.BatchGenerator import *
 
 # yapf: disable
 os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
 FLAGS = None
-
-#################################
-####### Data Preparation ########
-#################################
-def data_prepare():
-	#data_file = "../data/dataset/close_2016-2017.csv"
-	data_file = "../data/dataset/close_2012-2017.csv"
-	dataset = pd.read_csv(data_file,index_col=0, sep=',', usecols=[0,1], skiprows=1, names=['date','close'],parse_dates=True)
-	print (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) , " ------ Complete Data Reading")
-
-	# calculate momentum: Mt = (CLOSE(t) -CLOSE(t-1))/CLOSE(t-1)
-	dataset['mmt'] = 0.0
-	for i in range(1, len(dataset)):
-		dataset['mmt'][i] = (dataset['close'][i] - dataset['close'][i-1]) / dataset['close'][i-1]
-	print("-------------------- Momentum Distribution ------------------")
-	print(dataset['mmt'].value_counts(bins=5).sort_index())
-	pd.set_option('mode.chained_assignment',None)
-	# classify by counts
-	dataset['label'] = 0
-	mmt_series = dataset['mmt']
-	for i in range(len(dataset)):
-		mmt = mmt_series[i]
-		if mmt < -0.01: #-0.02:
-		    dataset['label'][i] = 0
-		elif mmt <= 0.01:
-		    dataset['label'][i] = 1
-		#elif mmt < 0.005:
-		#    dataset['label'][i] = 2
-		#elif mmt < 0.03: #0.02:
-		#    dataset['label'][i] = 3
-		else:
-		    dataset['label'][i] = 2
-	print("---- Label Distribution Check --------")
-	print("Total: ",len(dataset['label']))
-	print(dataset['label'].value_counts().sort_index())
-	print (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) , " ------ Complete Data Preparation")
-	return dataset
 
 """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
 def variable_summaries(var):	
@@ -86,16 +52,17 @@ def train(dataset):
 	tf.reset_default_graph()
 
 	# how long will a span cover, e.g. 20 days (4 tradable weeks)
-	TIME_SPAN = 4 # 4weeks, 1month
+	TIME_SPAN = FLAGS.time_steps # 4weeks, 1month
 	TRAIN_RATIO = 0.9#0.8
 	BATCH_SIZE = FLAGS.batch_size
-	n_neurons = 150 #250
+	n_neurons = FLAGS.n_neurons #250
 	n_steps = TIME_SPAN
-	n_input = 5#1, 1 week's data as feature
+	n_input = FLAGS.input_dim #5, 1 week's data as feature
 	n_output = 3#5 #5 class
-	n_layers = 3 #5#10 #5 #3
-	learning_rate = 0.001#0.0005 # # 0.02 # 0.005
-
+	n_layers = FLAGS.n_layers #5#10 #5 #3
+	learning_rate = FLAGS.learning_rate #0.0005 # # 0.02 # 0.005
+	print(FLAGS)
+	
 	with tf.name_scope('input'):
 		X = tf.placeholder(tf.float32, [None, n_steps, n_input], name='X-input')
 		y = tf.placeholder(tf.int32, [None, n_steps], name='y-input') # every time step correspond to a label
@@ -113,8 +80,9 @@ def train(dataset):
 	#if is_training:
 	#    lstm_cell = tf.contrib.rnn.DropoutWrapper(cells, input_keep_prob=keep_prob)
 
-	print('cells.output_size: ', cells.output_size,'cells.state_size: ',cells.state_size)
-	print("STATES: ", states)
+	print('cells.output_size: ', cells.output_size)
+	print('cells.state_size: ',cells.state_size)
+	#print("STATES: ", states)
 
 	tf.summary.histogram('lstm_outputs',rnn_outputs) # new_h, every output
 	tf.summary.histogram('lstm_states', states)  # state is just the tuple(new_c, new_h)
@@ -130,8 +98,10 @@ def train(dataset):
 	fc_layer = fully_connected(rnn_outputs, n_output, activation_fn=None)
 
 	#print("RNN Outputs: ",rnn_outputs, " RNN states: ", states) 	# Output [batch_size, n_steps, n_neurons], States[batch_size, n_neurons]
-	print("Shape of Outputs: ",rnn_outputs.shape, "shape of states: ", tf.shape(states))
-	print("Shape of fc_layer: ",fc_layer.shape, "Shape of y: ", y.shape) # FC_Layer [batch_size, n_steps, n_outputs], Label [batch_size, n_steps]
+	print("Shape of Outputs: ",rnn_outputs.shape)
+	print(" states: ", states)
+	print("Shape of fc_layer: ",fc_layer.shape)
+	print("Shape of y: ", y.shape) # FC_Layer [batch_size, n_steps, n_outputs], Label [batch_size, n_steps]
 	#print("FC Layer last output:",fc_layer[:,:,-1])
 	# stacked_rnn_outputs = tf.reshape(rnn_outputs, [-1, n_neurons])
 	# stacked_outputs = fully_connected(stacked_rnn_outputs, n_output, activation_fn=None)
@@ -169,33 +139,7 @@ def train(dataset):
 	#########################################
 	n_epoch = 1#1#5#10
 
-	# split dataset to training set & test set
-	n_batch = (len(dataset['close']) + 1 - TIME_SPAN - n_input) // (BATCH_SIZE * TIME_SPAN)
-	n_training = int(n_batch * TRAIN_RATIO)
-	print("train set: [%d, %d), test set: [%d, %d)" % (0,n_training, n_training, n_batch))
-
-	# Batch Generator. b_index represents batch's index in dataset
-	def next_batch(b_index):
-		X_batch, y_batch = [],[]
-		# retrieve chunks in continuous way. every n_step as a chunk, overlapped
-		for i in range(BATCH_SIZE):
-			X_instance, y_instance=[],[]
-			for j in range(TIME_SPAN):
-				X_instance.append(dataset['close'].values[b_index + i*TIME_SPAN + j : b_index + i*TIME_SPAN + j + n_input])
-				y_instance.append(dataset['label'].values[b_index + i*TIME_SPAN + j + n_input])
-			X_batch.append(X_instance)
-			y_batch.append(y_instance)   # every time step got a label
-		return np.array(X_batch), np.array(y_batch)#.reshape(-1)
-	#print('TESTING: ', next_batch(0))
-	def feed_dict(is_training, index=0):
-		if is_training:
-			xs, ys = next_batch(index % n_training)
-		else:
-			if index >= n_batch:
-				index = n_training
-			xs, ys = next_batch(index)
-		return {X: xs, y: ys}
-# yapf: enable
+	# yapf: enable
 	######### Start Training ########################
 	start_time = time.time()
 	init = tf.global_variables_initializer()
@@ -208,37 +152,48 @@ def train(dataset):
 		init.run()
 		for j in range(n_epoch):
 			best_train_acc, sum_train_acc = 0., 0.
+			best_test_acc, sum_test_acc = 0., 0.
 			
-			test_cnt = n_training
 			for i in range(FLAGS.max_steps):	
 				if i % 10 == 0:
 					# Record summaries and test-set accuracy
-					summary, acc = sess.run([merged, accuracy], feed_dict=feed_dict(False, test_cnt))
-					test_cnt += 1
+					data = dataset.next_batch(is_training=False)
+					summary, acc_test = sess.run([merged, accuracy], feed_dict={X: data['X'], y: data['y']})
 					test_writer.add_summary(summary, i)
-					print('Test Accuracy %s: %s' % (i, acc))
+					print('Test Accuracy %s: %s' % (i, acc_test))
+					if acc_test > best_test_acc:
+						best_test_acc = acc_test
+					sum_test_acc += acc_test
 				# Record train set summaries and train
-				elif i % 50 == 49: # Record execution stats	
+				elif i % 100 == 99: # Record execution stats	
+					data = dataset.next_batch()
 					run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
 					run_metadata = tf.RunMetadata()
-					#summary,_,acc,fc, fp, fl, lb,cr = sess.run([merged, training_op, accuracy,fc_layer,final_predict,final_label,y,correct],
-					summary, _, acc, fp, fl, cr = sess.run([merged, training_op, accuracy,final_predict,final_label,correct],
-						                  feed_dict=feed_dict(True, i),
+					summary, acc, _ = sess.run([merged, accuracy, training_op],
+					#summary, _, acc, fp, fl, cr, out, st = sess.run([merged, training_op, accuracy,final_predict,final_label,correct,rnn_outputs, states],
+						                  feed_dict={X: data['X'], y: data['y']},
 						                  options=run_options,
 						                  run_metadata=run_metadata)
 					train_writer.add_run_metadata(run_metadata, 'step%03d' % i)
 					train_writer.add_summary(summary, i)
 					print('Adding run metadata for %d, Acc: %s' % (i, acc))
 					#print('FC Layer value: ', fc)
-					print('Final Predict value: ', fp)
+					#print('Final Predict value: ', fp)
 					#print('Label value: ', lb)
-					print('Final Label value: ', fl)
-					print('CORRECT: ', cr)
+					#print('Final Label value: ', fl)
+					#print('CORRECT: ', cr)
+					#print('RNN_OUTPUT: ', out)
+					#print('RNN_STATES: ', st)
 					# Record a summary
 				else:
-					summary, _ = sess.run([merged, training_op], feed_dict=feed_dict(True, i))
+					data = dataset.next_batch()
+					summary, _, acc_train = sess.run([merged, training_op, accuracy], feed_dict={X: data['X'], y: data['y']})
 					train_writer.add_summary(summary, i)
-			
+					if acc_train > best_train_acc:
+						best_train_acc = acc_train
+					sum_train_acc += acc_train
+			print("   BEST Train Accuracy:", best_train_acc, " AVERAGE Train Accuracy:", sum_train_acc/FLAGS.max_steps)
+        	print("   BEST Test Accuracy:", best_test_acc, " AVERAGE Test Accuracy:", sum_test_acc/FLAGS.max_steps*10)
 		train_writer.close()
 		test_writer.close()
 
@@ -246,7 +201,7 @@ def main(_):
 	if tf.gfile.Exists(FLAGS.log_dir):
 		tf.gfile.DeleteRecursively(FLAGS.log_dir)
 	tf.gfile.MakeDirs(FLAGS.log_dir)
-	dataset = data_prepare()
+	dataset = BatchGenerator('../data/dataset/close_2012-2017.csv', FLAGS.batch_size, train_ratio=0.9,time_steps=FLAGS.time_steps, input_size=FLAGS.input_dim)
 	train(dataset)
 
 if __name__ == '__main__':
@@ -254,10 +209,18 @@ if __name__ == '__main__':
 
 	parser.add_argument('--max_steps', type=int, default=100,
 		                  help='Number of steps to run trainer.')
-	parser.add_argument('--learning_rate', type=float, default=0.01,
+	parser.add_argument('--learning_rate', type=float, default=0.001,
 		                  help='Initial learning rate')
 	parser.add_argument('--batch_size', type=int, default=3,
 		                  help='number of instances in a batch')
+	parser.add_argument('--time_steps', type=int, default=4,
+		                  help='Number of time steps.')
+	parser.add_argument('--input_dim', type=int, default=5,
+		                  help='Dimension of inputs.')
+	parser.add_argument('--n_neurons', type=int, default=150,
+		                  help='Number of neurons.')
+	parser.add_argument('--n_layers', type=int, default=3,
+		                  help='Number of lstm layers.')
 	parser.add_argument('--dropout', type=float, default=0.9,
 		                  help='Keep probability for training dropout.')
 	parser.add_argument(
