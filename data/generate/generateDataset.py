@@ -17,13 +17,13 @@ def generateData(fileName, startTime, endTime, stocks, table = "factors_day", TY
         return
 
     cluster = Cluster(['192.168.1.111'])
-    session = cluster.connect('factors') #connect to the keyspace 'factors'
+    session = cluster.connect('experiment') #connect to the keyspace 'factors'
 
     print (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), "Retrieving data: ", len(stocks))
     #time list
     rows = session.execute('''
         select * from transaction_time 
-        where type= %s and time > %s and time < %s ALLOW FILTERING;''', [TYPE,startTime, endTime])
+        where type= %s and time >= %s and time <= %s ALLOW FILTERING;''', [TYPE,startTime, endTime])
 
     SQL = "SELECT value FROM "+table+" WHERE stock = ? AND factor = 'close' and time >= '" + str(startTime) +"' and time <= '" + str(endTime)+"'"
     preparedStmt = session.prepare(SQL)
