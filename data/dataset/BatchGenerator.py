@@ -23,6 +23,10 @@ def _data_prepare(file_name):
             dataset['label'][i] = 1
         else:
             dataset['label'][i] = 2
+    dataset['norm_close'] = 0.0
+    mean = dataset['close'].mean()
+    for i in range(len(dataset)):
+    	dataset['norm_close'][i] = dataset['close'][i] - mean
     print("---- Label Distribution Check --------")
     print("Total: ",len(dataset['label']))
     print(dataset['label'].value_counts().sort_index())
@@ -46,7 +50,7 @@ class BatchGenerator(object):
 		X_batch, y_batch = [],[]
 		# retrieve chunks in continuous way. every instance is independent
 		for i in range(self._batch_size ):
-			X_batch.append(self._dataset['close'].values[b_index + i * self._time_steps : b_index + (i + 1) * self._time_steps])
+			X_batch.append(self._dataset['norm_close'].values[b_index + i * self._time_steps : b_index + (i + 1) * self._time_steps])
 			y_batch.append(self._dataset['label'].values[b_index + (i + 1) * self._time_steps])
 		return np.array(X_batch).reshape(self._batch_size, self._time_steps, self._input_size), np.array(y_batch)
 		

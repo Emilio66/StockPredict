@@ -161,7 +161,7 @@ def main(_):
 	if tf.gfile.Exists(FLAGS.log_dir):
 		tf.gfile.DeleteRecursively(FLAGS.log_dir)
 	tf.gfile.MakeDirs(FLAGS.log_dir)
-	dataset = BatchGenerator('../data/dataset/close_2012-2017.csv', FLAGS.batch_size, train_ratio=0.9,time_steps=FLAGS.time_steps, input_size=FLAGS.input_dim)
+	dataset = BatchGenerator('../data/dataset/close_2007-2017.csv', FLAGS.batch_size, train_ratio=0.85,time_steps=FLAGS.time_steps, input_size=FLAGS.input_dim)
 	train(dataset)
 
 if __name__ == '__main__':
