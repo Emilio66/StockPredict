@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import time
+import matplotlib.pyplot as plt
 
 def _data_prepare(file_name):
     dataset = pd.read_csv(file_name,index_col=0, sep=',', usecols=[0,1], skiprows=1, names=['date','close'],parse_dates=True)
@@ -27,10 +28,42 @@ def _data_prepare(file_name):
     mean = dataset['close'].mean()
     for i in range(len(dataset)):
     	dataset['norm_close'][i] = dataset['close'][i] - mean
+    
+    dataset['trend']=0.0
+    trace = 0.618
+    price = dataset['close']
+    size = len(price)
+    start = 0
+    while price[start] > price[start+1]:
+    	start +=1
+    print("----- start: ",start)
+	#find peak, find trough, calculate retracement and label trend accordingly
+    i = start
+    while i < size - 1:
+        cursor = i
+        while cursor < size - 1 and price[cursor] < price[cursor+1]:
+            cursor += 1
+        peak = cursor
+        while cursor < size - 1 and price[cursor] > price[cursor+1]:
+            cursor += 1
+        trough = cursor
+        retracement = (price[peak] - price[trough]) / (price[peak] - price[i])
+        trend = 1 # flat
+        if retracement < trace:
+            trend = 0 # UP
+        elif retracement > 1 + trace:
+		    trend = 2 # DOWN
+        for k in range(i, cursor+1):
+            dataset['trend'][k] = trend
+        i = cursor
     print("---- Label Distribution Check --------")
     print("Total: ",len(dataset['label']))
     print(dataset['label'].value_counts().sort_index())
+    print("---- Trend Distribution Check --------")
+    print(dataset['trend'].value_counts().sort_index())
     print (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) , " ------ Complete Data Preparation")
+    dataset.plot(lw=2.0)
+    plt.show()
     return dataset
 
 class BatchGenerator(object):
@@ -50,8 +83,10 @@ class BatchGenerator(object):
 		X_batch, y_batch = [],[]
 		# retrieve chunks in continuous way. every instance is independent
 		for i in range(self._batch_size ):
-			X_batch.append(self._dataset['norm_close'].values[b_index + i * self._time_steps : b_index + (i + 1) * self._time_steps])
-			y_batch.append(self._dataset['label'].values[b_index + (i + 1) * self._time_steps])
+			#X_batch.append(self._dataset['norm_close'].values[b_index + i * self._time_steps : b_index + (i + 1) * self._time_steps])
+			#y_batch.append(self._dataset['label'].values[b_index + (i + 1) * self._time_steps])
+			X_batch.append(self._dataset['trend'].values[b_index + i * self._time_steps : b_index + (i + 1) * self._time_steps])
+			y_batch.append(self._dataset['trend'].values[b_index + (i + 1) * self._time_steps])
 		return np.array(X_batch).reshape(self._batch_size, self._time_steps, self._input_size), np.array(y_batch)
 		
 	# Batch Generator. b_index represents batch's index in dataset
@@ -83,7 +118,8 @@ class BatchGenerator(object):
 
 #### Unit Test ######
 if __name__ == '__main__':
-	generator = BatchGenerator('close_2012-2017.csv', batch_size=10, train_ratio=0.9, time_steps=4, input_size=1)
+	#generator = BatchGenerator('close_2012-2017.csv', batch_size=10, train_ratio=0.9, time_steps=4, input_size=1)
+	generator = BatchGenerator('close_weekly-2007-2017.csv', batch_size=10, train_ratio=0.9, time_steps=4, input_size=1)
 	print(generator.next_batch())
 	print("TRAIN CURSOR: ", generator._train_cursor)
 	print(generator.next_batch())
