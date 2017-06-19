@@ -62,8 +62,9 @@ def _data_prepare(file_name):
     print("---- Trend Distribution Check --------")
     print(dataset['trend'].value_counts().sort_index())
     print (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) , " ------ Complete Data Preparation")
-    dataset.plot(lw=2.0)
-    plt.show()
+    #dataset['label'].plot(lw=2.0)
+    #dataset['trend'].plot(lw=2.0)
+    #plt.show()
     return dataset
 
 class BatchGenerator(object):

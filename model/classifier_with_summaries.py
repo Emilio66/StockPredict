@@ -65,13 +65,15 @@ def train(dataset):
 	
 	with tf.name_scope('input'):
 		X = tf.placeholder(tf.float32, [None, n_steps, n_input], name='X-input')
-		y = tf.placeholder(tf.int32, [None, n_steps], name='y-input') # every time step correspond to a label
+		#y = tf.placeholder(tf.int32, [None, n_steps], name='y-input') # every time step correspond to a label
+		y = tf.placeholder(tf.int32, [None], name='y-input') # every instance relates to 1 label
 
 	
 	with tf.variable_scope("lstm_layers", initializer=tf.contrib.layers.variance_scaling_initializer()):
 		# define network, 3 LSTM layer now, use tf.tanh as activation function, use peephole
 		#lstm_cell = tf.contrib.rnn.LSTMCell(num_units=n_neurons, use_peepholes=False)
-		lstm_cell = tf.contrib.rnn.LSTMCell(num_units=n_neurons, activation=tf.nn.relu, use_peepholes=False)
+		#lstm_cell = tf.contrib.rnn.LSTMCell(num_units=n_neurons, activation=tf.nn.relu, use_peepholes=False)
+		lstm_cell = tf.contrib.rnn.LSTMCell(num_units=n_neurons)
 		cells = tf.contrib.rnn.MultiRNNCell([lstm_cell]*n_layers)
 		rnn_outputs, states = tf.nn.dynamic_rnn(cells, X, dtype=tf.float32)
 
@@ -88,15 +90,15 @@ def train(dataset):
 	tf.summary.histogram('lstm_outputs',rnn_outputs) # new_h, every output
 	tf.summary.histogram('lstm_states', states)  # state is just the tuple(new_c, new_h)
 
-	#states = states[-1][1] #retrieve the last layer's state tuple and only need last output/hypothesis states, omit memory cell
-	#print("Final STATES: ", states)
-	#tf.summary.histogram('lstm_cell_states', states)
+	states = states[-1][1] #retrieve the last layer's state tuple and only need last output/hypothesis states, omit memory cell
+	print("Final STATES: ", states)
+	tf.summary.histogram('lstm_cell_states', states)
 	#states = tf.concat(axis=1, values=states) #sum up all neuron's result at final step
 	#tf.summary.histogram('lstm_cell_states_plus_bias', states)
 
 	#with tf.name_scope('fully_connected_layer'):
-	#fc_layer = fully_connected(states, n_output, activation_fn=None)
-	fc_layer = fully_connected(rnn_outputs, n_output, activation_fn=None)
+	fc_layer = fully_connected(states, n_output, activation_fn=None)
+	#fc_layer = fully_connected(rnn_outputs, n_output, activation_fn=None)
 
 	#print("RNN Outputs: ",rnn_outputs, " RNN states: ", states) 	# Output [batch_size, n_steps, n_neurons], States[batch_size, n_neurons]
 	print("Shape of Outputs: ",rnn_outputs.shape)
@@ -124,14 +126,15 @@ def train(dataset):
 
 	# measurement
 	with tf.name_scope('accuracy'):
-		#correct = tf.nn.in_top_k(fc_layer[:,:,-1], y[:,-1], 1) 	# only compare the final state's output class with label
-		final_predict = tf.slice(fc_layer,[0, n_steps - 1, 0],[-1, 1, -1]) 	# [batch_size, n_outputs]
-		final_label = tf.slice(y,[0, n_steps - 1], [-1, 1])					# [batch_size] (1 label)
-		print("sliced predict: ", final_predict, "sliced label:", final_label)
-		final_predict = tf.reshape(final_predict,[-1, n_output])
-		final_label = tf.reshape(final_label,[-1])
-		print("FINAL predict: ", final_predict, "FINAL label:", final_label)
-		correct = tf.nn.in_top_k(final_predict, final_label, 1) # accuracy in top k
+		####correct = tf.nn.in_top_k(fc_layer[:,:,-1], y[:,-1], 1) 	# only compare the final state's output class with label
+		#final_predict = tf.slice(fc_layer,[0, n_steps - 1, 0],[-1, 1, -1]) 	# [batch_size, n_outputs]
+		#final_label = tf.slice(y,[0, n_steps - 1], [-1, 1])					# [batch_size] (1 label)
+		#print("sliced predict: ", final_predict, "sliced label:", final_label)
+		#final_predict = tf.reshape(final_predict,[-1, n_output])
+		#final_label = tf.reshape(final_label,[-1])
+		#print("FINAL predict: ", final_predict, "FINAL label:", final_label)
+		#correct = tf.nn.in_top_k(final_predict, final_label, 1) # accuracy in top k
+		correct = tf.nn.in_top_k(fc_layer, y, 1)
 		accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
 	tf.summary.scalar('accuracy_mean',accuracy)
 
@@ -150,6 +153,8 @@ def train(dataset):
 		train_writer = tf.summary.FileWriter(FLAGS.log_dir + '/train', sess.graph)
 		test_writer = tf.summary.FileWriter(FLAGS.log_dir + '/test')    
 	
+		avg_train, avg_test = [], []
+		
 		init.run()
 		for j in range(n_epoch):
 			best_train_acc, sum_train_acc = 0., 0.
@@ -165,6 +170,10 @@ def train(dataset):
 					if acc_test > best_test_acc:
 						best_test_acc = acc_test
 					sum_test_acc += acc_test
+					if i == 0:
+						avg_test.append(0)
+					else:
+						avg_test.append(sum_test_acc/(i/10+1))
 				# Record train set summaries and train
 				elif i % 100 == 99: # Record execution stats	
 					data = dataset.next_batch()
@@ -193,16 +202,26 @@ def train(dataset):
 					if acc_train > best_train_acc:
 						best_train_acc = acc_train
 					sum_train_acc += acc_train
+				# add average training and testing accuracy
+				avg_train.append(sum_train_acc/(i+1))
+				
 			print("   BEST Train Accuracy:", best_train_acc, " AVERAGE Train Accuracy:", sum_train_acc/FLAGS.max_steps)
         	print("   BEST Test Accuracy:", best_test_acc, " AVERAGE Test Accuracy:", sum_test_acc/FLAGS.max_steps*10)
 		train_writer.close()
 		test_writer.close()
-
+		x_test = [i for i in range(0, FLAGS.max_steps, 10)]
+		plt.title("Average Accuracy of the Model", fontsize=34)
+		plt.plot(avg_train, markersize=10, linewidth=4, label="Training")
+		plt.plot(x_test, avg_test, markersize=10, linewidth=4, label="Testing")
+		plt.legend(loc="upper left")
+		plt.xlabel("Steps", fontsize=20)
+		plt.ylabel("Accuracy", fontsize=20)
+		plt.show()
 def main(_):
 	if tf.gfile.Exists(FLAGS.log_dir):
 		tf.gfile.DeleteRecursively(FLAGS.log_dir)
 	tf.gfile.MakeDirs(FLAGS.log_dir)
-	dataset = BatchGenerator('../data/dataset/close_2012-2017.csv', FLAGS.batch_size, train_ratio=0.9,time_steps=FLAGS.time_steps, input_size=FLAGS.input_dim)
+	dataset = BatchGenerator('../data/dataset/close_weekly-2007-2017.csv', FLAGS.batch_size, train_ratio=0.9,time_steps=FLAGS.time_steps, input_size=FLAGS.input_dim)
 	train(dataset)
 
 if __name__ == '__main__':
@@ -216,7 +235,7 @@ if __name__ == '__main__':
 		                  help='number of instances in a batch')
 	parser.add_argument('--time_steps', type=int, default=4,
 		                  help='Number of time steps.')
-	parser.add_argument('--input_dim', type=int, default=5,
+	parser.add_argument('--input_dim', type=int, default=1,
 		                  help='Dimension of inputs.')
 	parser.add_argument('--n_neurons', type=int, default=150,
 		                  help='Number of neurons.')
