@@ -65,29 +65,85 @@ def _data_prepare(file_name):
     #dataset['label'].plot(lw=2.0)
     #dataset['trend'].plot(lw=2.0)
     #plt.show()
-    return dataset
+    return dataset['trend'] # only need 1 series
 
+#########
+# NOTICE:
+# We use rolling data here due to the small size of data
+# eg:
+# batch0: X=[0,1,2,3] y=[4]
+# batch1: X=[1,2,3,4] y=[5]
+# because cross-validation somewhat damage the continuousness of data
+# here we use only the head & tail batch as for the test dataset
+#
 class BatchGenerator(object):
-	def __init__(self, file_name, batch_size, train_ratio, time_steps, input_size):
+	def __init__(self, file_name, batch_size, train_ratio, time_steps, input_size, fold_i=0, use_weight=False):
 		self._train_ratio = train_ratio
 		self._batch_size = batch_size
 		self._time_steps = time_steps
 		self._input_size = input_size
 		self._dataset = _data_prepare(file_name)
-		self._segment_num = (len(self._dataset)) // batch_size // time_steps
-		self._train_bound = int(self._segment_num * train_ratio)
+		#self._segment_num = (len(self._dataset)) // batch_size // time_steps
+		self._segment_num = (len(self._dataset) - time_steps) // batch_size # rollingly use data
+		
+		# for K-fold cross-validation, split train and test data evenly by parameter train_ratio
+		# fold_i indicate the index of data chunk (default 10 fold for cross-validation)
+		self._train_size = int(self._segment_num * train_ratio)
+		self._test_size = self._segment_num - self._train_size
+		if fold_i == 0:
+			self._test_dataset = self._dataset.values[0 : self._test_size * self._batch_size + self._time_steps + 1]
+			self._train_dataset = self._dataset.values[self._test_size * self._batch_size : self._segment_num * self._batch_size + self._time_steps + 1]
+		else:
+			self._test_dataset = self._dataset.values[self._train_size *  self._batch_size : self._segment_num * self._batch_size + self._time_steps + 1]
+			self._train_dataset = self._dataset.values[0 : self._train_size *  self._batch_size + self._time_steps + 1]
+		
 		self._train_cursor = 0
-		self._test_cursor = self._train_bound
-		print("DATASET FOR TRAINING: [0", self._train_bound, "), TEST SET: [", self._train_bound, self._segment_num," )")
+		self._test_cursor = 0
+		self._use_weight = use_weight
+
+		print("Training set size: ", len(self._train_dataset)," Test set size: ", len(self._test_dataset))
+		print(self._train_size, self._test_size)
+		print("Train interval: ",0, fold_i * batch_size, (fold_i + self._test_size) * batch_size, self._segment_num * batch_size)
+		print(" Test interval: ",fold_i * batch_size , (fold_i + self._test_size) * batch_size)
 	
-	def _next_batch(self, b_index):
+	# generate train&test dataset for cross-validation
+	def resetFold(self, fold_i):
+		fold_i = fold_i % self._segment_num
+		if fold_i == 0:
+			self._test_dataset = self._dataset.values[0 : self._test_size * self._batch_size + self._time_steps + 1]
+			self._train_dataset = self._dataset.values[self._test_size * self._batch_size : self._segment_num * self._batch_size + self._time_steps + 1]
+		else:
+			self._test_dataset = self._dataset.values[self._train_size *  self._batch_size : self._segment_num * self._batch_size + self._time_steps + 1]
+			self._train_dataset = self._dataset.values[0 : self._train_size *  self._batch_size + self._time_steps + 1]
+		
+		self._train_cursor = 0
+		self._test_cursor = 0
+	
+	# FUNCTION: assign weight by their time point
+	# NOTICE: use another of original dataset in case of dirty write
+	def weight_assign(self, dataseries):
+		if self._use_weight == True:
+			size = len(dataseries)
+			copy_dataseries = [0 for i in range(size)]
+			for i in range(size):
+				#print("i: ", i) 
+				copy_dataseries[i] = dataseries[i] * (i+1)
+			return copy_dataseries
+		return dataseries
+		
+	def _next_batch(self, b_index, isTraining = True):
 		X_batch, y_batch = [],[]
 		# retrieve chunks in continuous way. every instance is independent
+		if isTraining == True:
+			datasource = self._train_dataset
+		else:
+			datasource = self._test_dataset
 		for i in range(self._batch_size ):
 			#X_batch.append(self._dataset['norm_close'].values[b_index + i * self._time_steps : b_index + (i + 1) * self._time_steps])
 			#y_batch.append(self._dataset['label'].values[b_index + (i + 1) * self._time_steps])
-			X_batch.append(self._dataset['trend'].values[b_index + i * self._time_steps : b_index + (i + 1) * self._time_steps])
-			y_batch.append(self._dataset['trend'].values[b_index + (i + 1) * self._time_steps])
+			data_series_x = datasource[b_index + i : b_index + i + self._time_steps]
+			X_batch.append(self.weight_assign(data_series_x))	#time-weighted processing
+			y_batch.append(datasource[b_index + i + self._time_steps])
 		return np.array(X_batch).reshape(self._batch_size, self._time_steps, self._input_size), np.array(y_batch)
 		
 	# Batch Generator. b_index represents batch's index in dataset
@@ -105,13 +161,15 @@ class BatchGenerator(object):
 	
 	def next_batch(self, is_training=True):
 		if is_training:
-			xs, ys = self._next_batch(self._train_cursor * self._batch_size * self._time_steps)
-			self._train_cursor = (self._train_cursor + 1) % self._train_bound
+			#xs, ys = self._next_batch(self._train_cursor * self._batch_size * self._time_steps)
+			xs, ys = self._next_batch(self._train_cursor * self._batch_size, is_training) #rolling use
+			self._train_cursor = (self._train_cursor + 1) % self._train_size
 		else:
-			if self._test_cursor >= self._segment_num:
-				self._test_cursor =  self._train_bound
-			xs, ys = self._next_batch(self._test_cursor * self._batch_size * self._time_steps)
-			self._test_cursor = self._test_cursor + 1
+			#if self._test_cursor >= self._segment_num:
+			#	self._test_cursor =  self._train_size
+			#print("BOUND: ", self._test_cursor * self._batch_size * self._time_steps)
+			xs, ys = self._next_batch(self._test_cursor * self._batch_size, is_training)
+			self._test_cursor = (self._test_cursor + 1) % self._test_size
 		dic = {}
 		dic['X'] = xs
 		dic['y'] = ys
@@ -120,15 +178,21 @@ class BatchGenerator(object):
 #### Unit Test ######
 if __name__ == '__main__':
 	#generator = BatchGenerator('close_2012-2017.csv', batch_size=10, train_ratio=0.9, time_steps=4, input_size=1)
-	generator = BatchGenerator('close_weekly-2007-2017.csv', batch_size=10, train_ratio=0.9, time_steps=4, input_size=1)
-	print(generator.next_batch())
-	print("TRAIN CURSOR: ", generator._train_cursor)
-	print(generator.next_batch())
-	print("TRAIN CURSOR: ", generator._train_cursor)
-	print(generator.next_batch(is_training=False))
-	print("TEST CURSOR: ", generator._test_cursor)
-	print(generator.next_batch(is_training=False))
-	print("TEST CURSOR: ", generator._test_cursor)
+	generator = BatchGenerator('close_weekly-2007-2017.csv', 10, 0.9, 16, 1, 0, True)
+	#print(generator.next_batch())
+	#print("TRAIN CURSOR: ", generator._train_cursor)
+	#print(generator.next_batch())
+	#print("TRAIN CURSOR: ", generator._train_cursor)
+	#print(generator.next_batch(is_training=False))
+	#print("TEST CURSOR: ", generator._test_cursor)
+	#print(generator.next_batch(is_training=False))
+	#print("TEST CURSOR: ", generator._test_cursor)
+	for i in range(0,10):
+		print(i)
+		generator.next_batch(is_training=False)
+	#generator.next_batch(is_training=False)
+	#generator.next_batch()
+	#generator.next_batch()
 	
 	
 

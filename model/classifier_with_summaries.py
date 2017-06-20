@@ -88,7 +88,7 @@ def train(dataset):
 	#print("STATES: ", states)
 
 	tf.summary.histogram('lstm_outputs',rnn_outputs) # new_h, every output
-	tf.summary.histogram('lstm_states', states)  # state is just the tuple(new_c, new_h)
+	#tf.summary.histogram('lstm_states', states)  # state is just the tuple(new_c, new_h)
 
 	states = states[-1][1] #retrieve the last layer's state tuple and only need last output/hypothesis states, omit memory cell
 	print("Final STATES: ", states)
@@ -141,7 +141,7 @@ def train(dataset):
 	#########################################
 	############# Training Phase    #########
 	#########################################
-	n_epoch = 1#1#5#10
+	n_epoch = FLAGS.n_epoch
 
 	# yapf: enable
 	######### Start Training ########################
@@ -153,10 +153,12 @@ def train(dataset):
 		train_writer = tf.summary.FileWriter(FLAGS.log_dir + '/train', sess.graph)
 		test_writer = tf.summary.FileWriter(FLAGS.log_dir + '/test')    
 	
-		avg_train, avg_test = [], []
+		avg_train, avg_test = [0], [0]
+		sum_train, sum_test =0., 0. #for all iterations
 		
 		init.run()
 		for j in range(n_epoch):
+			dataset.resetFold(j)
 			best_train_acc, sum_train_acc = 0., 0.
 			best_test_acc, sum_test_acc = 0., 0.
 			
@@ -165,15 +167,13 @@ def train(dataset):
 					# Record summaries and test-set accuracy
 					data = dataset.next_batch(is_training=False)
 					summary, acc_test = sess.run([merged, accuracy], feed_dict={X: data['X'], y: data['y']})
-					test_writer.add_summary(summary, i)
+					test_writer.add_summary(summary, i+j*FLAGS.max_steps)
 					print('Test Accuracy %s: %s' % (i, acc_test))
 					if acc_test > best_test_acc:
 						best_test_acc = acc_test
 					sum_test_acc += acc_test
-					if i == 0:
-						avg_test.append(0)
-					else:
-						avg_test.append(sum_test_acc/(i/10+1))
+					sum_test += acc_test
+					avg_test.append(sum_test/(len(avg_test)+1))
 				# Record train set summaries and train
 				elif i % 100 == 99: # Record execution stats	
 					data = dataset.next_batch()
@@ -184,8 +184,8 @@ def train(dataset):
 						                  feed_dict={X: data['X'], y: data['y']},
 						                  options=run_options,
 						                  run_metadata=run_metadata)
-					train_writer.add_run_metadata(run_metadata, 'step%03d' % i)
-					train_writer.add_summary(summary, i)
+					train_writer.add_run_metadata(run_metadata, 'step%03d' % (i+j*FLAGS.max_steps))
+					train_writer.add_summary(summary, i+j*FLAGS.max_steps)
 					print('Adding run metadata for %d, Acc: %s' % (i, acc))
 					#print('FC Layer value: ', fc)
 					#print('Final Predict value: ', fp)
@@ -198,21 +198,23 @@ def train(dataset):
 				else:
 					data = dataset.next_batch()
 					summary, _, acc_train = sess.run([merged, training_op, accuracy], feed_dict={X: data['X'], y: data['y']})
-					train_writer.add_summary(summary, i)
+					train_writer.add_summary(summary, i+j*FLAGS.max_steps)
 					if acc_train > best_train_acc:
 						best_train_acc = acc_train
 					sum_train_acc += acc_train
 				# add average training and testing accuracy
-				avg_train.append(sum_train_acc/(i+1))
+					sum_train += acc_train
+					avg_train.append(sum_train/(len(avg_train)+1))
 				
+			print(" ========= EPOCH %d ============" % j)
 			print("   BEST Train Accuracy:", best_train_acc, " AVERAGE Train Accuracy:", sum_train_acc/FLAGS.max_steps)
-        	print("   BEST Test Accuracy:", best_test_acc, " AVERAGE Test Accuracy:", sum_test_acc/FLAGS.max_steps*10)
+			print("   BEST Test Accuracy:", best_test_acc, " AVERAGE Test Accuracy:", sum_test_acc/FLAGS.max_steps*10)
 		train_writer.close()
 		test_writer.close()
-		x_test = [i for i in range(0, FLAGS.max_steps, 10)]
-		plt.title("Average Accuracy of the Model", fontsize=34)
-		plt.plot(avg_train, markersize=10, linewidth=4, label="Training")
-		plt.plot(x_test, avg_test, markersize=10, linewidth=4, label="Testing")
+		x_test = [i for i in range(0, FLAGS.max_steps*n_epoch+10, 10)]
+		#plt.title("Average Accuracy of the Model", fontsize=34)
+		plt.plot(avg_train, markersize=14, linewidth=3, label="Training")
+		plt.plot(x_test, avg_test, markersize=14, linewidth=3, label="Testing")
 		plt.legend(loc="upper left")
 		plt.xlabel("Steps", fontsize=20)
 		plt.ylabel("Accuracy", fontsize=20)
@@ -221,17 +223,17 @@ def main(_):
 	if tf.gfile.Exists(FLAGS.log_dir):
 		tf.gfile.DeleteRecursively(FLAGS.log_dir)
 	tf.gfile.MakeDirs(FLAGS.log_dir)
-	dataset = BatchGenerator('../data/dataset/close_weekly-2007-2017.csv', FLAGS.batch_size, train_ratio=0.9,time_steps=FLAGS.time_steps, input_size=FLAGS.input_dim)
+	dataset = BatchGenerator('../data/dataset/close_weekly-2002-2017.csv', FLAGS.batch_size, train_ratio=0.8,time_steps=FLAGS.time_steps, input_size=FLAGS.input_dim, use_weight=FLAGS.use_weight)
 	train(dataset)
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 
-	parser.add_argument('--max_steps', type=int, default=100,
+	parser.add_argument('--max_steps', type=int, default=500,
 		                  help='Number of steps to run trainer.')
 	parser.add_argument('--learning_rate', type=float, default=0.001,
 		                  help='Initial learning rate')
-	parser.add_argument('--batch_size', type=int, default=3,
+	parser.add_argument('--batch_size', type=int, default=10,
 		                  help='number of instances in a batch')
 	parser.add_argument('--time_steps', type=int, default=4,
 		                  help='Number of time steps.')
@@ -243,6 +245,10 @@ if __name__ == '__main__':
 		                  help='Number of lstm layers.')
 	parser.add_argument('--dropout', type=float, default=0.9,
 		                  help='Keep probability for training dropout.')
+	parser.add_argument('--use_weight', type=bool, default=False,
+		                  help='Whether use time-weighted function.')	               
+	parser.add_argument('--n_epoch', type=int, default=2,
+		                  help='Epoch Number.')
 	parser.add_argument(
 		  '--data_dir',
 		  type=str,
