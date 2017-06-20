@@ -102,7 +102,7 @@ def train(dataset):
 
 	#print("RNN Outputs: ",rnn_outputs, " RNN states: ", states) 	# Output [batch_size, n_steps, n_neurons], States[batch_size, n_neurons]
 	print("Shape of Outputs: ",rnn_outputs.shape)
-	print(" states: ", states)
+	#print(" states: ", states)
 	print("Shape of fc_layer: ",fc_layer.shape)
 	print("Shape of y: ", y.shape) # FC_Layer [batch_size, n_steps, n_outputs], Label [batch_size, n_steps]
 	#print("FC Layer last output:",fc_layer[:,:,-1])
@@ -113,11 +113,11 @@ def train(dataset):
 	# softmax + cross entropy calculation
 	with tf.name_scope('cross_entropy'):
 		xentropy = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=fc_layer)
-		print("Cross-entropy", xentropy)	#[batch_size, n_steps], float32
+		#print("Cross-entropy", xentropy)	#[batch_size, n_steps], float32
 		# define loss function & optimize method
 		with tf.name_scope('total_loss'):
 			loss = tf.reduce_mean(xentropy)
-			print("LOSS:", loss)
+			#print("LOSS:", loss)
 	tf.summary.scalar('xentropy_mean', loss)
 
 	with tf.name_scope('training'):
@@ -142,7 +142,9 @@ def train(dataset):
 	############# Training Phase    #########
 	#########################################
 	n_epoch = FLAGS.n_epoch
-
+	if n_epoch > dataset.max_fold:
+		n_epoch = dataset.max_fold	# valid K-fold CV
+	
 	# yapf: enable
 	######### Start Training ########################
 	start_time = time.time()
@@ -155,15 +157,17 @@ def train(dataset):
 	
 		avg_train, avg_test = [0], [0]
 		sum_train, sum_test =0., 0. #for all iterations
+		train_res, test_res = [], []
 		
 		init.run()
 		for j in range(n_epoch):
 			dataset.resetFold(j)
 			best_train_acc, sum_train_acc = 0., 0.
 			best_test_acc, sum_test_acc = 0., 0.
+			test_freq = 20
 			
 			for i in range(FLAGS.max_steps):	
-				if i % 10 == 0:
+				if i % test_freq == 0:
 					# Record summaries and test-set accuracy
 					data = dataset.next_batch(is_training=False)
 					summary, acc_test = sess.run([merged, accuracy], feed_dict={X: data['X'], y: data['y']})
@@ -174,19 +178,25 @@ def train(dataset):
 					sum_test_acc += acc_test
 					sum_test += acc_test
 					avg_test.append(sum_test/(len(avg_test)+1))
+					test_res.append(acc_test)
 				# Record train set summaries and train
 				elif i % 100 == 99: # Record execution stats	
 					data = dataset.next_batch()
 					run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
 					run_metadata = tf.RunMetadata()
-					summary, acc, _ = sess.run([merged, accuracy, training_op],
+					summary, acc_train, _ = sess.run([merged, accuracy, training_op],
 					#summary, _, acc, fp, fl, cr, out, st = sess.run([merged, training_op, accuracy,final_predict,final_label,correct,rnn_outputs, states],
 						                  feed_dict={X: data['X'], y: data['y']},
 						                  options=run_options,
 						                  run_metadata=run_metadata)
 					train_writer.add_run_metadata(run_metadata, 'step%03d' % (i+j*FLAGS.max_steps))
 					train_writer.add_summary(summary, i+j*FLAGS.max_steps)
-					print('Adding run metadata for %d, Acc: %s' % (i, acc))
+					print('Adding run metadata for %d, Acc: %s' % (i, acc_train))
+					sum_train_acc += acc_train
+					# add average training accuracy
+					sum_train += acc_train
+					avg_train.append(sum_train/(len(avg_train)+1))
+					train_res.append(acc_train)
 					#print('FC Layer value: ', fc)
 					#print('Final Predict value: ', fp)
 					#print('Label value: ', lb)
@@ -202,19 +212,26 @@ def train(dataset):
 					if acc_train > best_train_acc:
 						best_train_acc = acc_train
 					sum_train_acc += acc_train
-				# add average training and testing accuracy
+					# add average training accuracy
 					sum_train += acc_train
 					avg_train.append(sum_train/(len(avg_train)+1))
+					train_res.append(acc_train)
 				
-			print(" ========= EPOCH %d ============" % j)
+			print(" ========= EPOCH %d ============" % (j+1))
 			print("   BEST Train Accuracy:", best_train_acc, " AVERAGE Train Accuracy:", sum_train_acc/FLAGS.max_steps)
-			print("   BEST Test Accuracy:", best_test_acc, " AVERAGE Test Accuracy:", sum_test_acc/FLAGS.max_steps*10)
+			print("   BEST Test Accuracy:", best_test_acc, " AVERAGE Test Accuracy:", sum_test_acc/FLAGS.max_steps*test_freq)
 		train_writer.close()
 		test_writer.close()
-		x_test = [i for i in range(0, FLAGS.max_steps*n_epoch+10, 10)]
+		x_test = [i for i in range(0, FLAGS.max_steps*n_epoch, test_freq)]
+		
+		print("==== FINAL TRAINING ACC: ", avg_train[-1])
+		print("==== FINAL TESTING ACC: ", avg_test[-1])
+		
 		#plt.title("Average Accuracy of the Model", fontsize=34)
-		plt.plot(avg_train, markersize=14, linewidth=3, label="Training")
-		plt.plot(x_test, avg_test, markersize=14, linewidth=3, label="Testing")
+		plt.plot(avg_train, markersize=14, linewidth=3, label="Average Training")
+		#plt.plot(train_res, markersize=11, linewidth=1, label="Training")
+		plt.plot(x_test, avg_test[:-1], markersize=14, linewidth=3, label="Average Testing")
+		#plt.plot(x_test, test_res, markersize=11, linewidth=1, label="Testing")
 		plt.legend(loc="upper left")
 		plt.xlabel("Steps", fontsize=20)
 		plt.ylabel("Accuracy", fontsize=20)
@@ -223,13 +240,13 @@ def main(_):
 	if tf.gfile.Exists(FLAGS.log_dir):
 		tf.gfile.DeleteRecursively(FLAGS.log_dir)
 	tf.gfile.MakeDirs(FLAGS.log_dir)
-	dataset = BatchGenerator('../data/dataset/close_weekly-2002-2017.csv', FLAGS.batch_size, train_ratio=0.8,time_steps=FLAGS.time_steps, input_size=FLAGS.input_dim, use_weight=FLAGS.use_weight)
+	dataset = BatchGenerator('../data/dataset/close_weekly-2002-2017.csv', FLAGS.batch_size, FLAGS.train_ratio,FLAGS.time_steps, FLAGS.input_dim, use_weight=FLAGS.use_weight)
 	train(dataset)
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 
-	parser.add_argument('--max_steps', type=int, default=500,
+	parser.add_argument('--max_steps', type=int, default=400,
 		                  help='Number of steps to run trainer.')
 	parser.add_argument('--learning_rate', type=float, default=0.001,
 		                  help='Initial learning rate')
@@ -243,10 +260,12 @@ if __name__ == '__main__':
 		                  help='Number of neurons.')
 	parser.add_argument('--n_layers', type=int, default=3,
 		                  help='Number of lstm layers.')
+	parser.add_argument('--train_ratio', type=float, default=0.8,
+		                  help='Keep probability for training dropout.')	                  
 	parser.add_argument('--dropout', type=float, default=0.9,
 		                  help='Keep probability for training dropout.')
 	parser.add_argument('--use_weight', type=bool, default=False,
-		                  help='Whether use time-weighted function.')	               
+		                  help='Whether use time-weighted function.')               
 	parser.add_argument('--n_epoch', type=int, default=2,
 		                  help='Epoch Number.')
 	parser.add_argument(

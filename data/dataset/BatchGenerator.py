@@ -67,15 +67,19 @@ def _data_prepare(file_name):
     #plt.show()
     return dataset['trend'] # only need 1 series
 
-#########
+###############
 # NOTICE:
-# We use rolling data here due to the small size of data
+# We use rolling data here due to the small size of data, label is the data 1 step further into the future
 # eg:
 # batch0: X=[0,1,2,3] y=[4]
 # batch1: X=[1,2,3,4] y=[5]
-# because cross-validation somewhat damage the continuousness of data
-# here we use only the head & tail batch as for the test dataset
-#
+# 
+# Variant K-fold cross-validation specially designed for time-series data are used
+# Use 1~K-1 chunk of data as train set, K chunk as test set, size of train set keep growing
+# eg:
+# train1: X=[0,1,2,3] test1=[4]
+# train2: X=[0,1,2,3,4] test2=[5]
+# train3: X=[0,1,2,3,4,5] test3=[6]
 class BatchGenerator(object):
 	def __init__(self, file_name, batch_size, train_ratio, time_steps, input_size, fold_i=0, use_weight=False):
 		self._train_ratio = train_ratio
@@ -89,35 +93,38 @@ class BatchGenerator(object):
 		# for K-fold cross-validation, split train and test data evenly by parameter train_ratio
 		# fold_i indicate the index of data chunk (default 10 fold for cross-validation)
 		self._train_size = int(self._segment_num * train_ratio)
-		self._test_size = self._segment_num - self._train_size
-		if fold_i == 0:
-			self._test_dataset = self._dataset.values[0 : self._test_size * self._batch_size + self._time_steps + 1]
-			self._train_dataset = self._dataset.values[self._test_size * self._batch_size : self._segment_num * self._batch_size + self._time_steps + 1]
+		remainder = self._segment_num - self._train_size
+		if remainder >= 2:
+			self._test_size = remainder / 2
+			self._buffer_size = remainder - self._test_size
 		else:
-			self._test_dataset = self._dataset.values[self._train_size *  self._batch_size : self._segment_num * self._batch_size + self._time_steps + 1]
-			self._train_dataset = self._dataset.values[0 : self._train_size *  self._batch_size + self._time_steps + 1]
-		
+			self._test_size = remainder 
+			self._buffer_size = 0
+		fold_i = fold_i % (self._buffer_size + 1)
+		self._train_dataset = self._dataset.values[0 : (self._train_size + fold_i) * self._batch_size + self._time_steps + 1]
+		self._test_dataset = self._dataset.values[(self._train_size + fold_i) * self._batch_size : (self._train_size + self._test_size + fold_i) * self._batch_size + self._time_steps + 1]
+		self._fold_i = fold_i
 		self._train_cursor = 0
 		self._test_cursor = 0
 		self._use_weight = use_weight
 
 		print("Training set size: ", len(self._train_dataset)," Test set size: ", len(self._test_dataset))
-		print(self._train_size, self._test_size)
-		print("Train interval: ",0, fold_i * batch_size, (fold_i + self._test_size) * batch_size, self._segment_num * batch_size)
-		print(" Test interval: ",fold_i * batch_size , (fold_i + self._test_size) * batch_size)
+		print("Batch Size: ", batch_size, "Tain Batch Num: ", self._train_size,"Test Batch Num: ", self._test_size," Buffer Batch Num: ",self._buffer_size)
+		print("Train interval: ",0, (self._train_size + fold_i) * self._batch_size + self._time_steps + 1)
+		print("Test interval: ",(self._train_size + fold_i) * self._batch_size, (self._train_size + self._test_size + fold_i) * self._batch_size + self._time_steps + 1)
 	
 	# generate train&test dataset for cross-validation
 	def resetFold(self, fold_i):
-		fold_i = fold_i % self._segment_num
-		if fold_i == 0:
-			self._test_dataset = self._dataset.values[0 : self._test_size * self._batch_size + self._time_steps + 1]
-			self._train_dataset = self._dataset.values[self._test_size * self._batch_size : self._segment_num * self._batch_size + self._time_steps + 1]
-		else:
-			self._test_dataset = self._dataset.values[self._train_size *  self._batch_size : self._segment_num * self._batch_size + self._time_steps + 1]
-			self._train_dataset = self._dataset.values[0 : self._train_size *  self._batch_size + self._time_steps + 1]
-		
+		fold_i = fold_i % (self._buffer_size + 1)
+		self._train_dataset = self._dataset.values[0 : (self._train_size + fold_i) * self._batch_size + self._time_steps + 1]
+		self._test_dataset = self._dataset.values[(self._train_size + fold_i) * self._batch_size : (self._train_size + self._test_size + fold_i) * self._batch_size + self._time_steps + 1]
+		self._fold_i = fold_i
 		self._train_cursor = 0
 		self._test_cursor = 0
+	
+	@property
+	def max_fold(self):
+		return self._buffer_size
 	
 	# FUNCTION: assign weight by their time point
 	# NOTICE: use another of original dataset in case of dirty write
@@ -163,7 +170,7 @@ class BatchGenerator(object):
 		if is_training:
 			#xs, ys = self._next_batch(self._train_cursor * self._batch_size * self._time_steps)
 			xs, ys = self._next_batch(self._train_cursor * self._batch_size, is_training) #rolling use
-			self._train_cursor = (self._train_cursor + 1) % self._train_size
+			self._train_cursor = (self._train_cursor + 1) % (self._train_size + self._fold_i)
 		else:
 			#if self._test_cursor >= self._segment_num:
 			#	self._test_cursor =  self._train_size
