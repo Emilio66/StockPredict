@@ -22,7 +22,31 @@ class param:
 
 ### run experiments ###
 FLAGS = param(batch_size=10, n_epoch=2)
-dataset = BatchGenerator('../data/dataset/close_2002-2017.csv',  FLAGS.batch_size, FLAGS.train_ratio,FLAGS.time_steps, FLAGS.input_dim, FLAGS.retrace, fold_i=0, use_weight=FLAGS.use_weight)
-acc_train, acc_test = train(dataset, FLAGS)	
-print(acc_train, acc_test)
+dataset = BatchGenerator('../data/dataset/close_weekly-2007-2017.csv',  FLAGS.batch_size, FLAGS.train_ratio,FLAGS.time_steps, FLAGS.input_dim, FLAGS.retrace, fold_i=0, use_weight=FLAGS.use_weight)
+
+#dataset = BatchGenerator('../data/dataset/close_2002-2017.csv',  FLAGS.batch_size, FLAGS.train_ratio,FLAGS.time_steps, FLAGS.input_dim, FLAGS.retrace, fold_i=0, use_weight=FLAGS.use_weight)
+
+#print(acc_train, acc_test)
+####### time steps experiment #####
+size = 20
+avg = 2
+filename = './exp/weekly_time_step1-'+str(size)+'.txt'
+
+lines = []
+for i in range(1, size+1):
+	FLAGS.time_steps = i
+	dataset.time_steps = i
+		# on average
+	sum_train, sum_test = 0., 0.
+	for j in range(0, avg):
+		acc_train, acc_test = train(dataset, FLAGS)
+		sum_train += acc_train
+		sum_test += acc_test
+	line  = str(i) + '\t' +str(sum_train/avg) +'\t' +str(sum_test/avg) +'\r\n'
+	lines.append(line)
+with open(filename, 'w') as f:
+	f.writelines(lines)
+print("Wring file", filename, "complete!")
+
+
 	
