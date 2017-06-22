@@ -13,8 +13,8 @@ import matplotlib.pyplot as plt
 '000905.SH', # 中证 500
 '''
 # data_file = "G:\code\StockPredict\\data\\dataset\\close_2016-2017.csv"
-#data_file = "../dataset/close_2007-2017.csv"
-data_file = "../dataset/close_weekly-2007-2017.csv"
+data_file = "../dataset/close_2002-2017.csv"
+#data_file = "../dataset/close_weekly-2007-2017.csv"
 #data_file = "../dataset/close_weekly-2002-2017.csv"
 #dataset = pd.read_csv(data_file,index_col=0, sep=',',names=['time','000001.SH','399001.SZ','399006.SZ','000300.SH','000016.SH','000905.SH'], skiprows=1,parse_dates=True)
 dataset = pd.read_csv(data_file,index_col=0, sep=',', usecols=[0,1],names=['time','close'], skiprows=1,parse_dates=True)
@@ -24,7 +24,6 @@ print(dataset.describe())
 #TRENDS COMPUTE
 dataset['trend']=0.0
 interval = 6
-trace = 0.618
 price = dataset['close']
 size = len(price)
 # for i in range(2, size, interval):
@@ -57,6 +56,7 @@ size = len(price)
 
 # initialize with a low point
 start = 0
+trace = 0.618
 while price[start] > price[start+1]:
 	start +=1
 print("start: ",start)
@@ -79,6 +79,24 @@ while i < size - 1:
 	for k in range(i, cursor+1):
 		dataset['trend'][k] = mark
 	i = cursor
+
+dataset['mmt'] = 0.0
+for i in range(1, len(dataset)):
+    dataset['mmt'][i] = (dataset['close'][i] - dataset['close'][i-1]) / dataset['close'][i-1]
+
+pd.set_option('mode.chained_assignment',None)
+    # classify by counts
+dataset['label'] = 0
+mmt_series = dataset['mmt']
+for i in range(len(dataset)):
+    mmt = mmt_series[i]
+    if mmt < -0.01: 
+        dataset['label'][i] = 500 #down
+    elif mmt <= 0.01:
+        dataset['label'][i] = 1000 #flat
+    else:
+        dataset['label'][i] = 1500 #up
+
 #plot
 print("TYPE : ", type(dataset))
 dataset.plot(lw=2.0)

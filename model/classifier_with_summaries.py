@@ -48,7 +48,7 @@ def elapsed(sec):
 ############################
 ###### contruction phase ###
 ############################
-def train(dataset):
+def train(dataset, FLAGS):
 	tf.reset_default_graph()
 
 	# how long will a span cover, e.g. 20 days (4 tradable weeks)
@@ -172,13 +172,13 @@ def train(dataset):
 					data = dataset.next_batch(is_training=False)
 					summary, acc_test = sess.run([merged, accuracy], feed_dict={X: data['X'], y: data['y']})
 					test_writer.add_summary(summary, i+j*FLAGS.max_steps)
-					print('Test Accuracy %s: %s' % (i, acc_test))
+					#print('Test Accuracy %s: %s' % (i, acc_test))
 					if acc_test > best_test_acc:
 						best_test_acc = acc_test
 					sum_test_acc += acc_test
 					sum_test += acc_test
 					avg_test.append(sum_test/(len(avg_test)+1))
-					test_res.append(acc_test)
+					#test_res.append(acc_test)
 				# Record train set summaries and train
 				elif i % 100 == 99: # Record execution stats	
 					data = dataset.next_batch()
@@ -191,12 +191,12 @@ def train(dataset):
 						                  run_metadata=run_metadata)
 					train_writer.add_run_metadata(run_metadata, 'step%03d' % (i+j*FLAGS.max_steps))
 					train_writer.add_summary(summary, i+j*FLAGS.max_steps)
-					print('Adding run metadata for %d, Acc: %s' % (i, acc_train))
+					#print('Adding run metadata for %d, Acc: %s' % (i, acc_train))
 					sum_train_acc += acc_train
 					# add average training accuracy
 					sum_train += acc_train
 					avg_train.append(sum_train/(len(avg_train)+1))
-					train_res.append(acc_train)
+					#train_res.append(acc_train)
 					#print('FC Layer value: ', fc)
 					#print('Final Predict value: ', fp)
 					#print('Label value: ', lb)
@@ -215,33 +215,34 @@ def train(dataset):
 					# add average training accuracy
 					sum_train += acc_train
 					avg_train.append(sum_train/(len(avg_train)+1))
-					train_res.append(acc_train)
+					#train_res.append(acc_train)
 				
-			print(" ========= EPOCH %d ============" % (j+1))
+			print(" ========= EPOCH %d STATISTICS============" % (j+1))
 			print("   BEST Train Accuracy:", best_train_acc, " AVERAGE Train Accuracy:", sum_train_acc/FLAGS.max_steps)
 			print("   BEST Test Accuracy:", best_test_acc, " AVERAGE Test Accuracy:", sum_test_acc/FLAGS.max_steps*test_freq)
+			print(" ========= ========= ========= =========")
 		train_writer.close()
 		test_writer.close()
 		x_test = [i for i in range(0, FLAGS.max_steps*n_epoch, test_freq)]
 		
 		print("==== FINAL TRAINING ACC: ", avg_train[-1])
 		print("==== FINAL TESTING ACC: ", avg_test[-1])
-		
+		print(" ========= ========= ========= =========")
 		#plt.title("Average Accuracy of the Model", fontsize=34)
-		plt.plot(avg_train, markersize=14, linewidth=3, label="Average Training")
-		#plt.plot(train_res, markersize=11, linewidth=1, label="Training")
-		plt.plot(x_test, avg_test[:-1], markersize=14, linewidth=3, label="Average Testing")
-		#plt.plot(x_test, test_res, markersize=11, linewidth=1, label="Testing")
+		plt.plot(avg_train, markersize=12, linewidth=2, label="Training")
+		plt.plot(x_test, avg_test[:-1], markersize=12, linewidth=2, label="Test")
 		plt.legend(loc="upper left")
-		plt.xlabel("Steps", fontsize=20)
-		plt.ylabel("Accuracy", fontsize=20)
-		plt.show()
+		plt.xlabel("Steps", fontsize=16)
+		plt.ylabel("Average Accuracy", fontsize=16)
+		#plt.show()
+		return avg_train[-1], avg_test[-1]
+		
 def main(_):
 	if tf.gfile.Exists(FLAGS.log_dir):
 		tf.gfile.DeleteRecursively(FLAGS.log_dir)
 	tf.gfile.MakeDirs(FLAGS.log_dir)
-	dataset = BatchGenerator('../data/dataset/close_weekly-2002-2017.csv', FLAGS.batch_size, FLAGS.train_ratio,FLAGS.time_steps, FLAGS.input_dim, use_weight=FLAGS.use_weight)
-	train(dataset)
+	dataset = BatchGenerator('../data/dataset/close_2002-2017.csv',  FLAGS.batch_size, FLAGS.train_ratio,FLAGS.time_steps, FLAGS.input_dim, FLAGS.retrace, fold_i=0, use_weight=FLAGS.use_weight)
+	train(dataset, FLAGS)
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
@@ -250,7 +251,7 @@ if __name__ == '__main__':
 		                  help='Number of steps to run trainer.')
 	parser.add_argument('--learning_rate', type=float, default=0.001,
 		                  help='Initial learning rate')
-	parser.add_argument('--batch_size', type=int, default=10,
+	parser.add_argument('--batch_size', type=int, default=20,
 		                  help='number of instances in a batch')
 	parser.add_argument('--time_steps', type=int, default=4,
 		                  help='Number of time steps.')
@@ -264,9 +265,11 @@ if __name__ == '__main__':
 		                  help='Keep probability for training dropout.')	                  
 	parser.add_argument('--dropout', type=float, default=0.9,
 		                  help='Keep probability for training dropout.')
-	parser.add_argument('--use_weight', type=bool, default=False,
+	parser.add_argument('--retrace', type=float, default=0.618,
+		                  help='Retracement of wave.')
+	parser.add_argument('--use_weight', type=int, default=0,
 		                  help='Whether use time-weighted function.')               
-	parser.add_argument('--n_epoch', type=int, default=2,
+	parser.add_argument('--n_epoch', type=int, default=4,
 		                  help='Epoch Number.')
 	parser.add_argument(
 		  '--data_dir',

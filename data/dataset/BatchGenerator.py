@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 import time
 import matplotlib.pyplot as plt
-
-def _data_prepare(file_name):
+import math
+def _data_prepare(file_name, retrace = 0.618):
     dataset = pd.read_csv(file_name,index_col=0, sep=',', usecols=[0,1], skiprows=1, names=['date','close'],parse_dates=True)
 
     # calculate momentum: Mt = (CLOSE(t) -CLOSE(t-1))/CLOSE(t-1)
@@ -30,13 +30,13 @@ def _data_prepare(file_name):
     	dataset['norm_close'][i] = dataset['close'][i] - mean
     
     dataset['trend']=0.0
-    trace = 0.618
     price = dataset['close']
     size = len(price)
     start = 0
     while price[start] > price[start+1]:
     	start +=1
     print("----- start: ",start)
+    print("-- retrace: ", retrace)
 	#find peak, find trough, calculate retracement and label trend accordingly
     i = start
     while i < size - 1:
@@ -49,9 +49,9 @@ def _data_prepare(file_name):
         trough = cursor
         retracement = (price[peak] - price[trough]) / (price[peak] - price[i])
         trend = 1 # flat
-        if retracement < trace:
+        if retracement < retrace:
             trend = 0 # UP
-        elif retracement > 1 + trace:
+        elif retracement > 1 + retrace:
 		    trend = 2 # DOWN
         for k in range(i, cursor+1):
             dataset['trend'][k] = trend
@@ -67,6 +67,18 @@ def _data_prepare(file_name):
     #plt.show()
     return dataset['trend'] # only need 1 series
 
+def generateSVMData(file_name, time_step, predict_day=1, train_ratio=0.85):
+	data = _data_prepare(file_name)
+	size = len(data)
+	bound = size * train_ratio
+	train_x, train_y, test_x, test_y = [],[],[],[]
+	#for i in range(0, bound - time_step):
+	#	train_x.append(data.values[i : i + time_step])
+	#	train_y.append(data.values[i + time_step + predict_day - 1])
+	for i in range(0, size - time_step - predict_day):
+		test_x.append(data.values[i : i + time_step])
+		test_y.append(data.values[i + time_step + predict_day - 1])
+	return np.array(test_x), np.array(test_y)
 ###############
 # NOTICE:
 # We use rolling data here due to the small size of data, label is the data 1 step further into the future
@@ -81,12 +93,12 @@ def _data_prepare(file_name):
 # train2: X=[0,1,2,3,4] test2=[5]
 # train3: X=[0,1,2,3,4,5] test3=[6]
 class BatchGenerator(object):
-	def __init__(self, file_name, batch_size, train_ratio, time_steps, input_size, fold_i=0, use_weight=False):
+	def __init__(self, file_name, batch_size, train_ratio, time_steps, input_size, retrace = 0.618, fold_i=0, use_weight=False):
 		self._train_ratio = train_ratio
 		self._batch_size = batch_size
 		self._time_steps = time_steps
 		self._input_size = input_size
-		self._dataset = _data_prepare(file_name)
+		self._dataset = _data_prepare(file_name, retrace)
 		#self._segment_num = (len(self._dataset)) // batch_size // time_steps
 		self._segment_num = (len(self._dataset) - time_steps) // batch_size # rollingly use data
 		
@@ -109,7 +121,7 @@ class BatchGenerator(object):
 		self._use_weight = use_weight
 
 		print("Training set size: ", len(self._train_dataset)," Test set size: ", len(self._test_dataset))
-		print("Batch Size: ", batch_size, "Tain Batch Num: ", self._train_size,"Test Batch Num: ", self._test_size," Buffer Batch Num: ",self._buffer_size)
+		print("Batch Size: ", batch_size, "Train Batch Num: ", self._train_size,"Test Batch Num: ", self._test_size," Buffer Batch Num: ",self._buffer_size)
 		print("Train interval: ",0, (self._train_size + fold_i) * self._batch_size + self._time_steps + 1)
 		print("Test interval: ",(self._train_size + fold_i) * self._batch_size, (self._train_size + self._test_size + fold_i) * self._batch_size + self._time_steps + 1)
 	
@@ -129,12 +141,31 @@ class BatchGenerator(object):
 	# FUNCTION: assign weight by their time point
 	# NOTICE: use another of original dataset in case of dirty write
 	def weight_assign(self, dataseries):
-		if self._use_weight == True:
+		if self._use_weight > 0:
+			if self._use_weight == 1:
+				weight = lambda x: x+1
+				
+			elif self._use_weight == 2:
+				weight = lambda x: (x+1)*(x+1)
+				
+			elif self._use_weight == 3:
+				weight = lambda x: (x+1)*(x+1)*(x+1)
+			
+			elif self._use_weight == 4:
+				weight = lambda x: math.log(x+1)	
+			
+			elif self._use_weight == 5:
+				weight = lambda x: math.exp(x+1)
+			
+			elif self._use_weight == 6: #sigmoid
+				weight = lambda x: 1 / (math.exp(-x-1))
+			
+			
 			size = len(dataseries)
 			copy_dataseries = [0 for i in range(size)]
 			for i in range(size):
 				#print("i: ", i) 
-				copy_dataseries[i] = dataseries[i] * (i+1)
+				copy_dataseries[i] = dataseries[i] * weight(i)
 			return copy_dataseries
 		return dataseries
 		
