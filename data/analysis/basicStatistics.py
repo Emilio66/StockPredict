@@ -13,11 +13,11 @@ import matplotlib.pyplot as plt
 '000905.SH', # 中证 500
 '''
 # data_file = "G:\code\StockPredict\\data\\dataset\\close_2016-2017.csv"
-data_file = "../dataset/close_2002-2017.csv"
-#data_file = "../dataset/close_weekly-2007-2017.csv"
+#data_file = "../dataset/close_2002-2017.csv"
+data_file = "../dataset/close_weekly-2007-2017.csv"
 #data_file = "../dataset/close_weekly-2002-2017.csv"
 #dataset = pd.read_csv(data_file,index_col=0, sep=',',names=['time','000001.SH','399001.SZ','399006.SZ','000300.SH','000016.SH','000905.SH'], skiprows=1,parse_dates=True)
-dataset = pd.read_csv(data_file,index_col=0, sep=',', usecols=[0,1],names=['time','close'], skiprows=1,parse_dates=True)
+dataset = pd.read_csv(data_file,index_col=0, sep=',', usecols=[0,5],names=['time','close'], skiprows=1,parse_dates=True)
 # Fundamental Analysis
 print(dataset.describe())
 
@@ -62,23 +62,33 @@ while price[start] > price[start+1]:
 print("start: ",start)
 #find peak, find trough, calculate retracement and label trend accordingly
 i = start
+waves = []
+retraces = []
 while i < size - 1:
 	cursor = i
-	while cursor < size - 1 and price[cursor] < price[cursor+1]:
+	while cursor < size - 1 and price[cursor] <= price[cursor+1]:
 		cursor += 1
 	peak = cursor
-	while cursor < size - 1 and price[cursor] > price[cursor+1]:
+	while cursor < size - 1 and price[cursor] >= price[cursor+1]:
 		cursor += 1
 	trough = cursor
 	retracement = (price[peak] - price[trough]) / (price[peak] - price[i])
-	mark = 2000 # flat
+	if retracement < 5:
+		retraces.append(retracement)
+	mark = 1 # flat
 	if retracement < trace:
-		mark = 2500 # UP
+		mark = 2 # UP
 	elif retracement > 1 + trace:
-		mark = 1500 # DOWN
+		mark = 0 # DOWN
 	for k in range(i, cursor+1):
 		dataset['trend'][k] = mark
+	waves.append(mark)
 	i = cursor
+
+print(dataset['trend'].value_counts().sort_index())
+retraces = pd.Series(retraces)
+print(retraces.value_counts(bins = 10).sort_index())
+print(retraces.describe())
 
 dataset['mmt'] = 0.0
 for i in range(1, len(dataset)):
@@ -91,13 +101,76 @@ mmt_series = dataset['mmt']
 for i in range(len(dataset)):
     mmt = mmt_series[i]
     if mmt < -0.01: 
-        dataset['label'][i] = 500 #down
+        dataset['label'][i] = 0 #down
     elif mmt <= 0.01:
-        dataset['label'][i] = 1000 #flat
+        dataset['label'][i] = 1 #flat
     else:
-        dataset['label'][i] = 1500 #up
+        dataset['label'][i] = 2 #up
 
 #plot
-print("TYPE : ", type(dataset))
-dataset.plot(lw=2.0)
+#print("TYPE : ", type(dataset))
+dataset.plot(y=['close', 'trend', 'label'],lw=2.0, subplots=True)
 plt.show()
+
+#plt.plot(waves, markersize=12, linewidth=2, label="Waves")
+#plt.show()
+## search for the optimal combination
+## wave theory: 2 up + 1 no + 1down or 2 downs
+'''
+print(dataset['trend'].value_counts().sort_index())
+up_max = 10
+down_max = 10
+trends = waves
+pattern1 = [2,2,2,0]
+pattern2 = [2,2,2,1]
+pattern3 = [2,2,1,0]
+pattern4 = [2,2,1,1]
+size = len(waves)
+cnt1, cnt2, cnt3, cnt4, others = 0,0,0,0,0
+for i in range(size - 4):
+	wave = waves[i : i + 4]
+	if wave == pattern1:
+		cnt1 += 1
+	elif wave == pattern2:
+		cnt2 += 1
+	elif wave == pattern3:
+		cnt3 += 1
+	elif wave == pattern4:
+		cnt4 += 1
+	else:
+		others +=1
+print(cnt1, cnt2, cnt3, cnt4, others, size)
+
+for i in range(down_max):
+	for j in range(1, up_max):
+		combo = 0
+		pattern = [ 2 for x in range(j)]
+		n = 0
+		while n < i:
+			pattern.append(0)
+			n += 1
+		k = 0
+		while k < len(trends) - i - j:
+			is_fit = (trends[k : k+j] == np.array(pattern))
+			for l in range(k, k+j):
+				if l > len(trends) - j -1:
+					break;
+				if trends[l] != 2:
+					is_fit = False
+					break;
+			
+			if is_fit is True:
+				for m in range(k+j, k+j+i):
+					if m > len(trends) - 1:
+						break;
+					if trends[m] != 0:
+						is_fit = False
+						break;
+			if is_fit is False:
+				k += 1
+			else:
+				combo += 1
+				k += i+j
+		print('UP/DOWN %d/%d total %d' % (j, i, combo))
+'''
+
