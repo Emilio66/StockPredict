@@ -83,15 +83,15 @@ def train(dataset, FLAGS):
 	#if is_training:
 	#    lstm_cell = tf.contrib.rnn.DropoutWrapper(cells, input_keep_prob=keep_prob)
 
-	print('cells.output_size: ', cells.output_size)
-	print('cells.state_size: ',cells.state_size)
+	#print('cells.output_size: ', cells.output_size)
+	#print('cells.state_size: ',cells.state_size)
 	#print("STATES: ", states)
 
 	tf.summary.histogram('lstm_outputs',rnn_outputs) # new_h, every output
 	#tf.summary.histogram('lstm_states', states)  # state is just the tuple(new_c, new_h)
 
 	states = states[-1][1] #retrieve the last layer's state tuple and only need last output/hypothesis states, omit memory cell
-	print("Final STATES: ", states)
+	#print("Final STATES: ", states)
 	tf.summary.histogram('lstm_cell_states', states)
 	#states = tf.concat(axis=1, values=states) #sum up all neuron's result at final step
 	#tf.summary.histogram('lstm_cell_states_plus_bias', states)
@@ -101,10 +101,10 @@ def train(dataset, FLAGS):
 	#fc_layer = fully_connected(rnn_outputs, n_output, activation_fn=None)
 
 	#print("RNN Outputs: ",rnn_outputs, " RNN states: ", states) 	# Output [batch_size, n_steps, n_neurons], States[batch_size, n_neurons]
-	print("Shape of Outputs: ",rnn_outputs.shape)
+	#print("Shape of Outputs: ",rnn_outputs.shape)
 	#print(" states: ", states)
-	print("Shape of fc_layer: ",fc_layer.shape)
-	print("Shape of y: ", y.shape) # FC_Layer [batch_size, n_steps, n_outputs], Label [batch_size, n_steps]
+	#print("Shape of fc_layer: ",fc_layer.shape)
+	#print("Shape of y: ", y.shape) # FC_Layer [batch_size, n_steps, n_outputs], Label [batch_size, n_steps]
 	#print("FC Layer last output:",fc_layer[:,:,-1])
 	# stacked_rnn_outputs = tf.reshape(rnn_outputs, [-1, n_neurons])
 	# stacked_outputs = fully_connected(stacked_rnn_outputs, n_output, activation_fn=None)
@@ -164,7 +164,7 @@ def train(dataset, FLAGS):
 			dataset.resetFold(j)
 			best_train_acc, sum_train_acc = 0., 0.
 			best_test_acc, sum_test_acc = 0., 0.
-			test_freq = 20
+			test_freq = 10
 			
 			for i in range(FLAGS.max_steps):	
 				if i % test_freq == 0:
@@ -223,25 +223,28 @@ def train(dataset, FLAGS):
 			print(" ========= ========= ========= =========")
 		train_writer.close()
 		test_writer.close()
-		x_test = [i for i in range(0, FLAGS.max_steps*n_epoch, test_freq)]
+		x_test = [i for i in range(0, FLAGS.max_steps*n_epoch, test_freq-1)]
+		size = len(avg_train)
 		
 		print("==== FINAL TRAINING ACC: ", avg_train[-1])
 		print("==== FINAL TESTING ACC: ", avg_test[-1])
 		print(" ========= ========= ========= =========")
 		#plt.title("Average Accuracy of the Model", fontsize=34)
-		plt.plot(avg_train, markersize=12, linewidth=2, label="Training")
-		plt.plot(x_test, avg_test[:-1], markersize=12, linewidth=2, label="Test")
+		plt.plot(avg_train, markersize=12, linewidth=3, label="Train")
+		plt.plot(x_test[: len(avg_test)], avg_test, markersize=12, linewidth=3, label="Test")
 		plt.legend(loc="upper left")
 		plt.xlabel("Steps", fontsize=16)
 		plt.ylabel("Average Accuracy", fontsize=16)
-		#plt.show()
+		plt.show()
 		return avg_train[-1], avg_test[-1]
 		
 def main(_):
 	if tf.gfile.Exists(FLAGS.log_dir):
 		tf.gfile.DeleteRecursively(FLAGS.log_dir)
 	tf.gfile.MakeDirs(FLAGS.log_dir)
-	dataset = BatchGenerator('../data/dataset/close_2002-2017.csv',  FLAGS.batch_size, FLAGS.train_ratio,FLAGS.time_steps, FLAGS.input_dim, FLAGS.retrace, fold_i=0, use_weight=FLAGS.use_weight)
+	#filename = '../data/dataset/close_weekly-2007-2017.csv'
+	filename = '../data/dataset/close_2002-2017.csv'
+	dataset = BatchGenerator(filename,  FLAGS.batch_size, FLAGS.train_ratio,FLAGS.time_steps, FLAGS.input_dim, FLAGS.retrace, fold_i=0, use_weight=FLAGS.use_weight)
 	train(dataset, FLAGS)
 
 if __name__ == '__main__':
@@ -271,6 +274,9 @@ if __name__ == '__main__':
 		                  help='Whether use time-weighted function.')               
 	parser.add_argument('--n_epoch', type=int, default=4,
 		                  help='Epoch Number.')
+	parser.add_argument('--no_retrace', type=bool, default=False,
+		                  help='Whether use retracement.')
+	
 	parser.add_argument(
 		  '--data_dir',
 		  type=str,
