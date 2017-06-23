@@ -4,8 +4,8 @@ import time
 import matplotlib.pyplot as plt
 import math
 def _data_prepare(file_name, retrace = 0.618, no_retrace = False):
-    dataset = pd.read_csv(file_name,index_col=0, sep=',', usecols=[0,1], skiprows=1, names=['date','close'],parse_dates=True)
-
+    dataset = pd.read_csv(file_name,index_col=0, sep=',', usecols=[0,4], skiprows=1, names=['date','close'],parse_dates=True)
+    print(file_name)
     # calculate momentum: Mt = (CLOSE(t) -CLOSE(t-1))/CLOSE(t-1)
     dataset['mmt'] = 0.0
     for i in range(1, len(dataset)):
