@@ -91,25 +91,25 @@ def generateSVMData(file_name, time_step, predict_day=1, no_retrace=False, use_w
 # NOTICE: use another of original dataset in case of dirty write
 def weight_assign(dataseries, use_weight = 0):
 	if use_weight > 0:
-		if use_weight == 1:
+		if use_weight == 2:
 			weight = lambda x: x+1
 			
-		elif use_weight == 2:
+		elif use_weight == 3:
 			weight = lambda x: (x+1)*(x+1)
 				
-		elif use_weight == 3:
+		elif use_weight == 4:
 			weight = lambda x: (x+1)*(x+1)*(x+1)
 		
-		elif use_weight == 4:
+		elif use_weight == 1:
 			weight = lambda x: math.log(x+1)	
 			
-		elif use_weight == 5:
+		elif use_weight == 6:
 			weight = lambda x: math.exp(x+1)
 			
-		elif use_weight == 6: #sigmoid
+		elif use_weight == 7: #sigmoid
 			weight = lambda x: 1 / (math.exp(-x-1))
 			
-		elif use_weight == 7: 
+		elif use_weight == 5: 
 			weight = lambda x: (x+1)**4
 			
 			
