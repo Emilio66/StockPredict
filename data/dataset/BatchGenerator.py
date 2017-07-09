@@ -89,30 +89,28 @@ def generateSVMData(file_name, time_step, predict_day=1, no_retrace=False, use_w
 
 # FUNCTION: assign weight by their time point
 # NOTICE: use another of original dataset in case of dirty write
-def weight_assign(dataseries, use_weight = 0):
+def weight_assign(dataseries, use_weight = 0, fine_grain = False):
 	if use_weight > 0:
-		if use_weight == 2:
-			weight = lambda x: x+1
-			
-		elif use_weight == 3:
-			weight = lambda x: (x+1)*(x+1)
-				
-		elif use_weight == 4:
-			weight = lambda x: (x+1)*(x+1)*(x+1)
-		
+		if fine_grain == True:
+			weight = lambda x: math.pow(x, use_weight)
 		elif use_weight == 1:
-			weight = lambda x: math.log(x+1)	
-			
+			weight = lambda x: math.log(x+1)
+		elif use_weight == 2:
+			weight = lambda x: x+1
+		elif use_weight == 3:
+		    weight = lambda x: (x+1) * math.log(x+1)
+		elif use_weight == 4:
+			weight = lambda x: (x+1)*(x+1)
+		elif use_weight == 5: 
+			weight = lambda x: (x+1)*(x+1)*(x+1)
 		elif use_weight == 6:
+			weight = lambda x: (x+1)**4
+		elif use_weight == 7:
 			weight = lambda x: math.exp(x+1)
 			
-		elif use_weight == 7: #sigmoid
-			weight = lambda x: 1 / (math.exp(-x-1))
-			
-		elif use_weight == 5: 
-			weight = lambda x: (x+1)**4
-			
-			
+		#elif use_weight == 7: #sigmoid
+		#	weight = lambda x: 1 / (math.exp(-x-1))
+		
 		size = len(dataseries)
 		copy_dataseries = [0 for i in range(size)]
 		for i in range(size):
@@ -134,12 +132,13 @@ def weight_assign(dataseries, use_weight = 0):
 # train2: X=[0,1,2,3,4] test2=[5]
 # train3: X=[0,1,2,3,4,5] test3=[6]
 class BatchGenerator(object):
-	def __init__(self, file_name, batch_size, train_ratio, time_steps, input_size, retrace = 0.618, fold_i=0, use_weight=False, no_retrace=False):
+	def __init__(self, file_name, batch_size, train_ratio, time_steps, input_size, retrace = 0.618, fold_i=0, use_weight=False, no_retrace=False, fine_grained=False):
 		self.train_ratio = train_ratio
 		self.batch_size = batch_size
 		self.time_steps = time_steps
 		self.input_size = input_size
 		self.no_retrace = no_retrace
+		self.fine_grained = fine_grained
 		self.dataset = _data_prepare(file_name, retrace, no_retrace=no_retrace)
 		#self.segment_num = (len(self.dataset)) // batch_size // time_steps
 		self.segment_num = (len(self.dataset) - time_steps) // batch_size # rollingly use data
@@ -191,7 +190,7 @@ class BatchGenerator(object):
 			#X_batch.append(self.dataset['norm_close'].values[b_index + i * self.time_steps : b_index + (i + 1) * self.time_steps])
 			#y_batch.append(self.dataset['label'].values[b_index + (i + 1) * self.time_steps])
 			data_series_x = datasource[b_index + i : b_index + i + self.time_steps]
-			X_batch.append(weight_assign(data_series_x, self.use_weight))#time-weighted processing
+			X_batch.append(weight_assign(data_series_x, self.use_weight, self.fine_grained))#time-weighted processing
 			y_batch.append(datasource[b_index + i + self.time_steps])
 		return np.array(X_batch).reshape(self.batch_size, self.time_steps, self.input_size), np.array(y_batch)
 		

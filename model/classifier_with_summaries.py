@@ -237,7 +237,7 @@ def train(dataset, FLAGS):
 		plt.legend(loc="upper left")
 		plt.xlabel("Steps", fontsize=16)
 		plt.ylabel("Average Accuracy", fontsize=16)
-		plt.show()
+		#plt.show()
 		return avg_train[-1], avg_test[-1]
 		
 def main(_):
@@ -274,13 +274,15 @@ if __name__ == '__main__':
 		                  help='Keep probability for training dropout.')
 	parser.add_argument('--retrace', type=float, default=0.618,
 		                  help='Retracement of wave.')
-	parser.add_argument('--use_weight', type=int, default=0,
+	parser.add_argument('--use_weight', type=float, default=0.0,
 		                  help='Whether use time-weighted function.')               
 	parser.add_argument('--n_epoch', type=int, default=4,
 		                  help='Epoch Number.')
 	parser.add_argument('--no_retrace', type=bool, default=False,
 		                  help='Whether use retracement.')
-	
+	parser.add_argument('--fine_grained', type=bool, default=False,
+		                  help='Use fine-grained weight function.')
+		                  
 	parser.add_argument(
 		  '--data_dir',
 		  type=str,
