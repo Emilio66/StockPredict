@@ -73,8 +73,10 @@ def train(dataset, FLAGS):
 		# define network, 3 LSTM layer now, use tf.tanh as activation function, use peephole
 		#lstm_cell = tf.contrib.rnn.LSTMCell(num_units=n_neurons, use_peepholes=False)
 		#lstm_cell = tf.contrib.rnn.LSTMCell(num_units=n_neurons, activation=tf.nn.relu, use_peepholes=False)
-		lstm_cell = tf.contrib.rnn.LSTMCell(num_units=n_neurons)
-		cells = tf.contrib.rnn.MultiRNNCell([lstm_cell]*n_layers)
+		stacked_cells = []
+		for i in range(n_layers):
+			stacked_cells.append(tf.contrib.rnn.LSTMCell(num_units=n_neurons))
+		cells = tf.contrib.rnn.MultiRNNCell(stacked_cells)
 		rnn_outputs, states = tf.nn.dynamic_rnn(cells, X, dtype=tf.float32)
 
 	# Add Dropout
@@ -242,10 +244,10 @@ def main(_):
 	if tf.gfile.Exists(FLAGS.log_dir):
 		tf.gfile.DeleteRecursively(FLAGS.log_dir)
 	tf.gfile.MakeDirs(FLAGS.log_dir)
-	#filename = '../data/dataset/close_weekly-2007-2017.csv'
+	filename = '../data/dataset/close_weekly-2007-2017.csv'
 	#filename = '../data/dataset/close_2002-2017.csv'
-	filename = '../data/dataset/Dow Jones Industrial Average.csv'
-	filename = '../data/dataset/S&P 500.csv'
+	#filename = '../data/dataset/Dow Jones Industrial Average.csv'
+	#filename = '../data/dataset/S&P 500.csv'
 	dataset = BatchGenerator(filename,  FLAGS.batch_size, FLAGS.train_ratio,FLAGS.time_steps, FLAGS.input_dim, FLAGS.retrace, fold_i=0, use_weight=FLAGS.use_weight)
 	train(dataset, FLAGS)
 
