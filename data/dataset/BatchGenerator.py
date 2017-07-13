@@ -3,8 +3,8 @@ import pandas as pd
 import time
 import matplotlib.pyplot as plt
 import math
-def _data_prepare(file_name, retrace = 0.618, no_retrace = False):
-    dataset = pd.read_csv(file_name,index_col=0, sep=',', usecols=[0,4], skiprows=1, names=['date','close'],parse_dates=True)
+def _data_prepare(file_name, retrace = 0.618, no_retrace = False, col=1):
+    dataset = pd.read_csv(file_name,index_col=0, sep=',', usecols=[0,col], skiprows=1, names=['date','close'],parse_dates=True)
     print(file_name)
     # calculate momentum: Mt = (CLOSE(t) -CLOSE(t-1))/CLOSE(t-1)
     dataset['mmt'] = 0.0
@@ -18,7 +18,7 @@ def _data_prepare(file_name, retrace = 0.618, no_retrace = False):
     mmt_series = dataset['mmt']
     for i in range(len(dataset)):
         mmt = mmt_series[i]
-        if mmt < -0.01: 
+        if mmt < -0.01:
             dataset['label'][i] = 0
         elif mmt <= 0.01:
             dataset['label'][i] = 1
@@ -28,7 +28,7 @@ def _data_prepare(file_name, retrace = 0.618, no_retrace = False):
     #mean = dataset['close'].mean()
     #for i in range(len(dataset)):
     #	dataset['norm_close'][i] = dataset['close'][i] - mean
-    
+
     dataset['trend']=0
     price = dataset['close']
     size = len(price)
@@ -56,7 +56,7 @@ def _data_prepare(file_name, retrace = 0.618, no_retrace = False):
 		for k in range(i, cursor+1):
 			dataset['trend'][k] = mark
 		i = cursor
-    
+
     #print("---- Label Distribution Check --------")
     #print("Total: ",len(dataset['label']))
     #print(dataset['label'].value_counts().sort_index())
@@ -101,16 +101,16 @@ def weight_assign(dataseries, use_weight = 0, fine_grain = False):
 		    weight = lambda x: (x+1) * math.log(x+1)
 		elif use_weight == 4:
 			weight = lambda x: (x+1)*(x+1)
-		elif use_weight == 5: 
+		elif use_weight == 5:
 			weight = lambda x: (x+1)*(x+1)*(x+1)
 		elif use_weight == 6:
 			weight = lambda x: (x+1)**4
 		elif use_weight == 7:
 			weight = lambda x: math.exp(x+1)
-			
+
 		#elif use_weight == 7: #sigmoid
 		#	weight = lambda x: 1 / (math.exp(-x-1))
-		
+
 		size = len(dataseries)
 		copy_dataseries = [0 for i in range(size)]
 		for i in range(size):
@@ -124,7 +124,7 @@ def weight_assign(dataseries, use_weight = 0, fine_grain = False):
 # eg:
 # batch0: X=[0,1,2,3] y=[4]
 # batch1: X=[1,2,3,4] y=[5]
-# 
+#
 # Variant K-fold cross-validation specially designed for time-series data are used
 # Use 1~K-1 chunk of data as train set, K chunk as test set, size of train set keep growing
 # eg:
@@ -132,17 +132,17 @@ def weight_assign(dataseries, use_weight = 0, fine_grain = False):
 # train2: X=[0,1,2,3,4] test2=[5]
 # train3: X=[0,1,2,3,4,5] test3=[6]
 class BatchGenerator(object):
-	def __init__(self, file_name, batch_size, train_ratio, time_steps, input_size, retrace = 0.618, fold_i=0, use_weight=False, no_retrace=False, fine_grained=False):
+	def __init__(self, file_name, batch_size, train_ratio, time_steps, input_size, column = 1, retrace = 0.618, fold_i=0, use_weight=False, no_retrace=False, fine_grained=False):
 		self.train_ratio = train_ratio
 		self.batch_size = batch_size
 		self.time_steps = time_steps
 		self.input_size = input_size
 		self.no_retrace = no_retrace
 		self.fine_grained = fine_grained
-		self.dataset = _data_prepare(file_name, retrace, no_retrace=no_retrace)
+		self.dataset = _data_prepare(file_name, retrace, no_retrace=no_retrace, col = column)
 		#self.segment_num = (len(self.dataset)) // batch_size // time_steps
 		self.segment_num = (len(self.dataset) - time_steps) // batch_size # rollingly use data
-		
+
 		# for K-fold cross-validation, split train and test data evenly by parameter train_ratio
 		# fold_i indicate the index of data chunk (default 10 fold for cross-validation)
 		self.train_size = int(self.segment_num * train_ratio)
@@ -151,7 +151,7 @@ class BatchGenerator(object):
 			self.test_size = remainder / 2
 			self.buffer_size = remainder - self.test_size
 		else:
-			self.test_size = remainder 
+			self.test_size = remainder
 			self.buffer_size = 0
 		fold_i = fold_i % (self.buffer_size + 1)
 		self.train_dataset = self.dataset.values[0 : (self.train_size + fold_i) * self.batch_size + self.time_steps + 1]
@@ -165,7 +165,7 @@ class BatchGenerator(object):
 		#print("Batch Size: ", batch_size, "Train Batch Num: ", self.train_size,"Test Batch Num: ", self.test_size," Buffer Batch Num: ",self.buffer_size)
 		#print("Train interval: ",0, (self.train_size + fold_i) * self.batch_size + self.time_steps + 1)
 		#print("Test interval: ",(self.train_size + fold_i) * self.batch_size, (self.train_size + self.test_size + fold_i) * self.batch_size + self.time_steps + 1)
-	
+
 	# generate train&test dataset for cross-validation
 	def resetFold(self, fold_i):
 		fold_i = fold_i % (self.buffer_size + 1)
@@ -174,11 +174,11 @@ class BatchGenerator(object):
 		self.fold_i = fold_i
 		self.train_cursor = 0
 		self.test_cursor = 0
-	
+
 	@property
 	def max_fold(self):
 		return self.buffer_size
-	
+
 	def _next_batch(self, b_index, isTraining = True):
 		X_batch, y_batch = [],[]
 		# retrieve chunks in continuous way. every instance is independent
@@ -193,7 +193,7 @@ class BatchGenerator(object):
 			X_batch.append(weight_assign(data_series_x, self.use_weight, self.fine_grained))#time-weighted processing
 			y_batch.append(datasource[b_index + i + self.time_steps])
 		return np.array(X_batch).reshape(self.batch_size, self.time_steps, self.input_size), np.array(y_batch)
-		
+
 	# Batch Generator. b_index represents batch's index in dataset
 	#def _next_batch(self, b_index):
 	#	X_batch, y_batch = [],[]
@@ -204,9 +204,9 @@ class BatchGenerator(object):
 	#			X_instance.append(self.dataset['close'].values[b_index + i * self.time_steps + j : b_index + i * self.time_steps + j + self.input_size])
 	#			y_instance.append(self.dataset['label'].values[b_index + i * self.time_steps + j + self.input_size]) # every time step got a label
 	#		X_batch.append(X_instance)
-	#		y_batch.append(y_instance)   
+	#		y_batch.append(y_instance)
 	#	return np.array(X_batch), np.array(y_batch)
-	
+
 	def next_batch(self, is_training=True):
 		if is_training:
 			#xs, ys = self.next_batch(self.train_cursor * self.batch_size * self.time_steps)
@@ -242,7 +242,3 @@ if __name__ == '__main__':
 	#generator.next_batch(is_training=False)
 	#generator.next_batch()
 	#generator.next_batch()
-	
-	
-
-

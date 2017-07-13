@@ -1,4 +1,4 @@
-from classifier_with_summaries import *
+from classifier_with_basic_rnn import *
 import sys
 sys.path.append("..")
 from data.dataset.BatchGenerator import *
@@ -80,10 +80,10 @@ if sys.argv[1] == '0':
 	num = 7
 	avg = 3
 
-	FLAGS = param(time_steps=16, n_neurons=320, learning_rate=0.0024, no_retrace=False)
-	dataset = BatchGenerator('../data/dataset/close_2007-2017.csv',  FLAGS.batch_size, FLAGS.train_ratio,FLAGS.time_steps, FLAGS.input_dim, column = 1, retrace = FLAGS.retrace, fold_i=0, use_weight=FLAGS.use_weight)
+	FLAGS = param(time_steps=4, n_neurons=320, learning_rate=0.0024, no_retrace=False)
+	dataset = BatchGenerator('../data/dataset/close_2007-2017.csv',  FLAGS.batch_size, FLAGS.train_ratio,FLAGS.time_steps, FLAGS.input_dim, FLAGS.retrace, fold_i=0, use_weight=FLAGS.use_weight)
 	lines = []
-	filename = './exp/final_weighted_function_LSTM16-'+str(num)+'.txt'
+	filename = './exp/weighted_function_basicRNN4-'+str(num)+'.txt'
 
 	for i in range(num+1):
 		FLAGS.use_weight = i
@@ -190,10 +190,10 @@ elif sys.argv[1] == '5':
 	minP = 0.9
 	step = 0.1
 
-	FLAGS = param(time_steps=12, n_neurons=320, n_epoch=2, learning_rate=0.0024, no_retrace=False, fine_grained= True)
-	dataset = BatchGenerator('../data/dataset/close_2007-2017.csv',  FLAGS.batch_size, FLAGS.train_ratio,FLAGS.time_steps, FLAGS.input_dim,column = 1, retrace = FLAGS.retrace, fold_i=0, use_weight=FLAGS.use_weight, fine_grained = True)
+	FLAGS = param(time_steps=8, n_neurons=320, n_epoch=2, learning_rate=0.0024, no_retrace=False, fine_grained= True)
+	dataset = BatchGenerator('../data/dataset/close_2007-2017.csv',  FLAGS.batch_size, FLAGS.train_ratio,FLAGS.time_steps, FLAGS.input_dim, FLAGS.retrace, fold_i=0, use_weight=FLAGS.use_weight, fine_grained = True)
 	lines = []
-	filename = './exp/final_fine_grained_weight_12step-every'+str(step)+'.txt'
+	filename = './exp/fine_grained_weighted_function-step-'+str(step)+'.txt'
 	i = minP
 	while i <= maxP:
 		FLAGS.use_weight = i
@@ -215,7 +215,7 @@ elif sys.argv[1] == '6':
 	cols = [1,2,4,5,6]
 	weight = 3	#nlogn
 	lines = []
-	filename = './exp/final_weighted_LSTM_datasets.txt'
+	filename = './exp/final_weighted_RNN_datasets.txt'
 	for i in cols:
 		FLAGS = param(time_steps=4, n_neurons=320, learning_rate=0.0024, no_retrace=False)
 		dataset = BatchGenerator('../data/dataset/close_2007-2017.csv', FLAGS.batch_size, FLAGS.train_ratio,FLAGS.time_steps, FLAGS.input_dim,column = i, retrace=FLAGS.retrace, fold_i=0, use_weight=weight)
