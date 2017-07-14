@@ -1,0 +1,10 @@
+Dataset: 1 NoRetrace: False Avg: 0.803402445508
+Dataset: 2 NoRetrace: False Avg: 0.791600212653
+Dataset: 4 NoRetrace: False Avg: 0.816374269006
+Dataset: 5 NoRetrace: False Avg: 0.80404040404
+Dataset: 6 NoRetrace: False Avg: 0.787028176502
+Dataset: 1 NoRetrace: True Avg: 0.630303030303
+Dataset: 2 NoRetrace: True Avg: 0.519404572036
+Dataset: 4 NoRetrace: True Avg: 0.576289207868
+Dataset: 5 NoRetrace: True Avg: 0.580542264753
+Dataset: 6 NoRetrace: True Avg: 0.483678894205

@@ -1,0 +1,10 @@
+Dataset: 1 NoRetrace: False Avg: 0.805103668262 Best: 0.812121212121
+Dataset: 2 NoRetrace: False Avg: 0.794364699628 Best: 0.80202020202
+Dataset: 4 NoRetrace: False Avg: 0.81658692185 Best: 0.820202020202
+Dataset: 5 NoRetrace: False Avg: 0.806592238171 Best: 0.812121212121
+Dataset: 6 NoRetrace: False Avg: 0.788729399256 Best: 0.79797979798
+Dataset: 1 NoRetrace: True Avg: 0.629346092504 Best: 0.650505050505
+Dataset: 2 NoRetrace: True Avg: 0.516002126528 Best: 0.539393939394
+Dataset: 4 NoRetrace: True Avg: 0.576501860712 Best: 0.608080808081
+Dataset: 5 NoRetrace: True Avg: 0.576714513557 Best: 0.6
+Dataset: 6 NoRetrace: True Avg: 0.473258904838 Best: 0.519191919192
