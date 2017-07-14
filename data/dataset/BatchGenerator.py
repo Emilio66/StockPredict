@@ -73,9 +73,9 @@ def _data_prepare(file_name, retrace = 0.618, no_retrace = False, col=1):
     else:
     	return dataset['trend'] # only need 1 series
 
-def generateSVMData(file_name, time_step, predict_day=1, no_retrace=False, use_weight=2,  train_ratio=0.8):
-	print('params: ',time_step, predict_day, no_retrace, use_weight,train_ratio)
-	data = _data_prepare(file_name, no_retrace=no_retrace)
+def generateSVMData(file_name, time_step, predict_day=1, no_retrace=False, use_weight=2,train_ratio=0.8,col=1):
+	print('params: ',time_step, predict_day, no_retrace, use_weight,train_ratio, col)
+	data = _data_prepare(file_name, no_retrace=no_retrace, col =col)
 	size = len(data)
 	bound = size * train_ratio
 	train_x, train_y, test_x, test_y = [],[],[],[]
@@ -86,6 +86,20 @@ def generateSVMData(file_name, time_step, predict_day=1, no_retrace=False, use_w
 		test_x.append(weight_assign(data.values[i : i + time_step], use_weight))
 		test_y.append(data.values[i + time_step + predict_day - 1])
 	return np.array(test_x), np.array(test_y)
+
+def generateEnsembleData(file_name, time_step, predict_day=1, no_retrace=False, use_weight=1,  train_ratio=0.8, col = 1):
+	print('params: ',time_step, predict_day, no_retrace, use_weight,train_ratio, col)
+	data = _data_prepare(file_name, no_retrace=no_retrace, col=col)
+	size = len(data)
+	bound = int(size * train_ratio)
+	train_x, train_y, test_x, test_y = [],[],[],[]
+	for i in range(0, bound - time_step):
+		train_x.append(data.values[i : i + time_step])
+		train_y.append(data.values[i + time_step + predict_day - 1])
+	for i in range(bound, size - time_step - predict_day):
+		test_x.append(data.values[i : i + time_step])
+		test_y.append(data.values[i + time_step + predict_day - 1])
+	return np.array(train_x), np.array(train_y),np.array(test_x), np.array(test_y)
 
 # FUNCTION: assign weight by their time point
 # NOTICE: use another of original dataset in case of dirty write
@@ -234,7 +248,8 @@ if __name__ == '__main__':
 	#print("TRAIN CURSOR: ", generator.train_cursor)
 	#print(generator.next_batch(is_training=False))
 	#print("TEST CURSOR: ", generator._test_cursor)
-	for i in range(0,10):
+	generateEnsembleData('close_2007-2017.csv',10, 1, no_retrace=False, use_weight=0, col=1)
+    	for i in range(0,10):
 		#print(i)
 		generator.next_batch(is_training=False)
 	#print(generator.next_batch(is_training=False))

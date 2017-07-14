@@ -190,10 +190,10 @@ elif sys.argv[1] == '5':
 	minP = 0.9
 	step = 0.1
 
-	FLAGS = param(time_steps=12, n_neurons=320, n_epoch=2, learning_rate=0.0024, no_retrace=False, fine_grained= True)
+	FLAGS = param(time_steps=6, n_neurons=320, n_epoch=2, learning_rate=0.0024, no_retrace=False, fine_grained= True)
 	dataset = BatchGenerator('../data/dataset/close_2007-2017.csv',  FLAGS.batch_size, FLAGS.train_ratio,FLAGS.time_steps, FLAGS.input_dim,column = 1, retrace = FLAGS.retrace, fold_i=0, use_weight=FLAGS.use_weight, fine_grained = True)
 	lines = []
-	filename = './exp/final_fine_grained_weight_12step-every'+str(step)+'.txt'
+	filename = './exp/final_fine_grained_weight_6step-every'+str(step)+'.txt'
 	i = minP
 	while i <= maxP:
 		FLAGS.use_weight = i
